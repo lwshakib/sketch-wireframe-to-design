@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useWorkspaceStore } from "@/context";
 import {
   Palette,
@@ -21,11 +21,14 @@ import TypographyTab from "./_compoennts/TypographyTab";
 export default function WorkspacePage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { workspaces, setWorkspaces } = useWorkspaceStore();
 
   const [workspaceName, setWorkspaceName] = useState("Workspace");
   const [workspaceLoading, setWorkspaceLoading] = useState(true);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [activeMainTab, setActiveMainTab] = useState("canvas");
   const [activeStyleGuideTab, setActiveStyleGuideTab] = useState("moodboard");
 
   const workspaceFromStore = useMemo(
@@ -94,6 +97,55 @@ export default function WorkspacePage() {
     };
   }, [workspaceId, setWorkspaces]);
 
+  // Keep tab state in sync with the URL so the active tab is shareable/bookmarkable.
+  useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    if (tabParam === "canvas" || tabParam === "style-guide") {
+      setActiveMainTab(tabParam);
+    }
+
+    const styleTabParam = searchParams.get("styleTab");
+    if (
+      styleTabParam === "colors" ||
+      styleTabParam === "typography" ||
+      styleTabParam === "moodboard"
+    ) {
+      setActiveStyleGuideTab(styleTabParam);
+    }
+  }, [searchParams]);
+
+  const updateUrlParams = (paramsToUpdate: Record<string, string | undefined>) => {
+    const params = new URLSearchParams(searchParams.toString());
+
+    Object.entries(paramsToUpdate).forEach(([key, value]) => {
+      if (value) {
+        params.set(key, value);
+      } else {
+        params.delete(key);
+      }
+    });
+
+    const query = params.toString();
+    const nextUrl = query ? `${pathname}?${query}` : pathname;
+    router.replace(nextUrl);
+  };
+
+  const handleMainTabChange = (value: string) => {
+    setActiveMainTab(value);
+    updateUrlParams({
+      tab: value,
+      styleTab: value === "style-guide" ? activeStyleGuideTab : undefined,
+    });
+  };
+
+  const handleStyleGuideTabChange = (value: string) => {
+    setActiveStyleGuideTab(value);
+    updateUrlParams({
+      tab: "style-guide",
+      styleTab: value,
+    });
+  };
+
   const StyleGuideTabs = () => {
     return (
       <div className="shrink-0">
@@ -131,7 +183,7 @@ export default function WorkspacePage() {
               content: null,
             },
           ]}
-          onTabChange={setActiveStyleGuideTab}
+          onTabChange={handleStyleGuideTabChange}
         />
       </div>
     );
@@ -152,7 +204,8 @@ export default function WorkspacePage() {
   };
   return (
     <Tabs
-      defaultValue="canvas"
+      value={activeMainTab}
+      onValueChange={handleMainTabChange}
       className="min-h-screen bg-[#0f0f0f] text-white gap-0 w-full"
     >
       <header className="flex items-center justify-between px-4 py-3">
