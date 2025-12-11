@@ -6,12 +6,17 @@ export async function fetchWorkspacesForUser(
   clerkId: string
 ): Promise<Workspace[]> {
   const workspaces = await db
-    .select()
+    .select({
+      id: workspacesTable.id,
+      name: workspacesTable.name,
+      createdAt: workspacesTable.createdAt,
+      updatedAt: workspacesTable.updatedAt,
+    })
     .from(workspacesTable)
     .where(eq(workspacesTable.clerkId, clerkId))
     .orderBy(desc(workspacesTable.updatedAt));
 
-  return workspaces;
+  return workspaces as Workspace[];
 }
 
 export async function fetchWorkspaceById(
@@ -22,7 +27,10 @@ export async function fetchWorkspaceById(
     .select()
     .from(workspacesTable)
     .where(
-      and(eq(workspacesTable.clerkId, clerkId), eq(workspacesTable.id, workspaceId))
+      and(
+        eq(workspacesTable.clerkId, clerkId),
+        eq(workspacesTable.id, workspaceId)
+      )
     );
   return workspace ?? null;
 }
@@ -43,3 +51,24 @@ export async function createWorkspaceForUser(
   return workspace;
 }
 
+export async function updateWorkspaceContent(
+  clerkId: string,
+  workspaceId: string,
+  content: Record<string, unknown> | null
+): Promise<Workspace | null> {
+  const [updated] = await db
+    .update(workspacesTable)
+    .set({
+      content,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(workspacesTable.clerkId, clerkId),
+        eq(workspacesTable.id, workspaceId)
+      )
+    )
+    .returning();
+
+  return updated ?? null;
+}

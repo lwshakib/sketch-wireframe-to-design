@@ -199,7 +199,10 @@ export default function WorkspacePage() {
       </header>
 
       <TabsContent value="canvas" className="flex-1 p-6 text-white/60 flex">
-        <CanvasArea />
+        <CanvasArea
+          workspaceId={workspaceId ?? ""}
+          initialContent={workspaceFromStore?.content ?? null}
+        />
       </TabsContent>
       <TabsContent value="style-guide" className="flex-1 p-6 text-white/60">
         <div className="flex flex-col h-full max-w-7xl mx-auto">

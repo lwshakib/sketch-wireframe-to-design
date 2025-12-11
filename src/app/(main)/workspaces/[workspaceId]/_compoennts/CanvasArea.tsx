@@ -89,13 +89,36 @@ type HistoryEntry = {
   connectors: Connector[];
 };
 
+type CanvasContent = {
+  pan: { x: number; y: number };
+  zoom: number;
+  snapshot: HistoryEntry;
+};
+
+const isCanvasContent = (value: unknown): value is CanvasContent => {
+  if (!value || typeof value !== "object") return false;
+  const maybe = value as Partial<CanvasContent>;
+  const hasNumbers =
+    typeof maybe.zoom === "number" &&
+    typeof maybe.pan?.x === "number" &&
+    typeof maybe.pan?.y === "number";
+  const hasSnapshot = maybe.snapshot && typeof maybe.snapshot === "object";
+  return Boolean(hasNumbers && hasSnapshot);
+};
+
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 5;
 const ZOOM_STEP = 0.1;
 const makeId = () =>
   `${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 8)}`;
 
-const CanvasArea = () => {
+const CanvasArea = ({
+  workspaceId,
+  initialContent,
+}: {
+  workspaceId: string;
+  initialContent?: Record<string, unknown> | null;
+}) => {
   const [zoom, setZoom] = useState(1);
   const [activeTool, setActiveTool] = useState("Hand");
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -274,7 +297,6 @@ const CanvasArea = () => {
     previewPoint: { x: number; y: number };
   } | null>(null);
   const pointerToolRef = useRef<string>("");
-  const STORAGE_KEY = "sketch-canvas-state";
   const measureText = useCallback((text: string, fontSize: number) => {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
@@ -573,18 +595,23 @@ const CanvasArea = () => {
     frames,
   ]);
   const persistState = useCallback(
-    (state: {
-      pan: { x: number; y: number };
-      zoom: number;
-      snapshot: HistoryEntry;
-    }) => {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      } catch (err) {
-        console.error("Failed to persist canvas state", err);
-      }
+    (state: CanvasContent) => {
+      if (!workspaceId) return;
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+
+      saveTimerRef.current = setTimeout(async () => {
+        try {
+          await fetch(`/api/workspaces/${workspaceId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ content: state }),
+          });
+        } catch (err) {
+          console.error("Failed to persist workspace", err);
+        }
+      }, 800);
     },
-    []
+    [workspaceId]
   );
   const pushHistory = useCallback(
     (overrides?: Partial<HistoryEntry>) => {
@@ -992,30 +1019,19 @@ const CanvasArea = () => {
     ]
   );
 
-  // hydrate from localStorage once
+  // hydrate from API-provided content once
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as {
-        pan?: { x: number; y: number };
-        zoom?: number;
-        snapshot?: HistoryEntry;
-      } | null;
-      if (!parsed?.snapshot) return;
+    if (!initialContent) return;
+    if (!isCanvasContent(initialContent)) return;
 
-      applySnapshot(parsed.snapshot);
-      setHistory([parsed.snapshot]);
-      setHistoryIndex(0);
-      if (parsed.pan) setPan(parsed.pan);
-      if (parsed.zoom) setZoom(clampZoom(parsed.zoom));
-      hydratedRef.current = true;
-      requestAnimationFrame(() => setRerenderTick((t) => t + 1));
-    } catch (err) {
-      console.error("Failed to load canvas state", err);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    applySnapshot(initialContent.snapshot);
+    setHistory([initialContent.snapshot]);
+    setHistoryIndex(0);
+    if (initialContent.pan) setPan(initialContent.pan);
+    if (initialContent.zoom) setZoom(clampZoom(initialContent.zoom));
+    hydratedRef.current = true;
+    requestAnimationFrame(() => setRerenderTick((t) => t + 1));
+  }, [applySnapshot, clampZoom, initialContent]);
 
   // log + debounce persist on any canvas change (including pan/zoom)
   useEffect(() => {
@@ -1036,10 +1052,7 @@ const CanvasArea = () => {
       },
     });
 
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      persistState({ pan, zoom, snapshot: currentSnapshot });
-    }, 800);
+    persistState({ pan, zoom, snapshot: currentSnapshot });
 
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
