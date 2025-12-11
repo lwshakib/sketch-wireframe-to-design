@@ -2,19 +2,13 @@ import { fetchWorkspaceById } from "@/actions/workspaces";
 import { currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
-type Params = {
-  params: {
-    workspaceId: string;
-  };
-};
-
-export async function GET(_req: Request, { params }: Params) {
+export async function GET(_req: Request, { params }: { params: Promise<{ workspaceId: string }> }) {
   const user = await currentUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { workspaceId } = params;
+  const { workspaceId } = await params;
   if (!workspaceId) {
     return NextResponse.json(
       { error: "Workspace id is required" },

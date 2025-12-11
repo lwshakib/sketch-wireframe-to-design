@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useWorkspaceStore } from "@/context";
 import {
@@ -19,8 +19,80 @@ import ColorsTab from "./_compoennts/ColorsTab";
 import TypographyTab from "./_compoennts/TypographyTab";
 
 export default function WorkspacePage() {
-  
+  const { workspaceId } = useParams<{ workspaceId: string }>();
+  const router = useRouter();
+  const { workspaces, setWorkspaces } = useWorkspaceStore();
+
+  const [workspaceName, setWorkspaceName] = useState("Workspace");
+  const [workspaceLoading, setWorkspaceLoading] = useState(true);
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [activeStyleGuideTab, setActiveStyleGuideTab] = useState("moodboard");
+
+  const workspaceFromStore = useMemo(
+    () => workspaces.find((workspace) => workspace.id === workspaceId),
+    [workspaces, workspaceId]
+  );
+
+  useEffect(() => {
+    if (workspaceFromStore?.name) {
+      setWorkspaceName(workspaceFromStore.name);
+      setWorkspaceLoading(false);
+    }
+  }, [workspaceFromStore]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+
+    let ignore = false;
+
+    const loadWorkspace = async () => {
+      try {
+        setWorkspaceError(null);
+        setWorkspaceLoading(true);
+
+        const response = await fetch(`/api/workspaces/${workspaceId}`);
+        if (!response.ok) {
+          throw new Error("Failed to fetch workspace");
+        }
+
+        const data = await response.json();
+        if (ignore) return;
+
+        const fetchedWorkspace = data.workspace;
+        if (fetchedWorkspace?.name) {
+          setWorkspaceName(fetchedWorkspace.name);
+        }
+
+        setWorkspaces((previous) => {
+          const existingIndex = previous.findIndex(
+            (workspace) => workspace.id === fetchedWorkspace.id
+          );
+
+          if (existingIndex === -1) {
+            return [...previous, fetchedWorkspace];
+          }
+
+          const updated = [...previous];
+          updated[existingIndex] = fetchedWorkspace;
+          return updated;
+        });
+      } catch (error) {
+        if (ignore) return;
+        console.error(error);
+        setWorkspaceError("Unable to load this workspace.");
+      } finally {
+        if (!ignore) {
+          setWorkspaceLoading(false);
+        }
+      }
+    };
+
+    loadWorkspace();
+
+    return () => {
+      ignore = true;
+    };
+  }, [workspaceId, setWorkspaces]);
 
   const StyleGuideTabs = () => {
     return (
@@ -75,17 +147,9 @@ export default function WorkspacePage() {
             <Moodboard />
           </div>
         )}
-      </div>    
+      </div>
     );
   };
-  const {workspaceId} = useParams();
-  const router = useRouter();
-
-  
-
-
-
-
   return (
     <Tabs
       defaultValue="canvas"
@@ -102,9 +166,13 @@ export default function WorkspacePage() {
             <ArrowLeft className="h-4 w-4" />
           </button>
           <span className="text-sm font-semibold text-white/90">
-            {workspaceName}
+            {workspaceLoading ? "Loading..." : workspaceName}
           </span>
         </div>
+
+        {workspaceError ? (
+          <div className="text-xs text-red-300">{workspaceError}</div>
+        ) : null}
 
         <TabsList className="bg-[#1b1b1b] text-white/80 px-2 py-1 rounded-full shadow-[0_0_0_1px_rgba(255,255,255,0.08)] h-10 gap-2">
           <TabsTrigger
@@ -157,5 +225,4 @@ export default function WorkspacePage() {
       </TabsContent>
     </Tabs>
   );
-};
-
+}
