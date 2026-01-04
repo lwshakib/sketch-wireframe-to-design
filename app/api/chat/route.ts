@@ -37,7 +37,7 @@ export async function POST(req: Request) {
       data: {
         projectId: projectId,
         role: "user",
-        parts: lastMessage.content
+        parts: lastMessage.parts
       },
     });
 
@@ -48,7 +48,7 @@ export async function POST(req: Request) {
           data: {
             projectId: projectId,
             role: "assistant",
-            parts: result.text,
+            parts: result.content,
           },
         });
       } catch (error) {

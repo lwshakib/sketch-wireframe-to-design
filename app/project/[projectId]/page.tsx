@@ -9,6 +9,8 @@ import {
   ChevronDown,
   Sparkles,
   Search,
+  ZoomIn,
+  ZoomOut,
   MoreVertical,
   Smartphone,
   Monitor,
@@ -32,6 +34,11 @@ import {
   Image as ImageIcon,
   User,
   Zap,
+  Code,
+  ExternalLink,
+  FileText,
+  MousePointerClick,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
@@ -62,6 +69,49 @@ interface Project {
 }
 
 
+const getInjectedHTML = (html: string) => {
+  const script = `
+    <script>
+      const sendHeight = () => {
+        window.parent.postMessage({ type: 'HEIGHT_UPDATE', height: document.body.scrollHeight }, '*');
+      };
+      window.onload = sendHeight;
+      new ResizeObserver(sendHeight).observe(document.documentElement);
+      setInterval(sendHeight, 1000); // Fail-safe check
+
+      window.addEventListener('message', (event) => {
+        if (event.data.type === 'UPDATE_CONTENT') {
+          const parser = new DOMParser();
+          const newDoc = parser.parseFromString(event.data.content, 'text/html');
+          
+          // Update head (styles, links)
+          const newHead = newDoc.head.innerHTML;
+          if (document.head.innerHTML !== newHead) {
+            document.head.innerHTML = newHead;
+          }
+
+          // Update body
+          document.body.innerHTML = newDoc.body.innerHTML;
+          
+          // Re-trigger height update
+          sendHeight();
+        }
+      });
+    </script>
+    <style>
+      ::-webkit-scrollbar { display: none; }
+      body { -ms-overflow-style: none; scrollbar-width: none; margin: 0; padding: 0; background: white; transition: background 0.3s ease; }
+      @keyframes shimmer {
+        100% { transform: translateX(100%); }
+      }
+    </style>
+  `;
+  if (html.toLowerCase().includes('</body>')) {
+    return html.replace(/<\/body>/i, `${script}</body>`);
+  }
+  return `${html}${script}`;
+};
+
 
 export default function ProjectPage() {
   const params = useParams();
@@ -72,7 +122,7 @@ export default function ProjectPage() {
   const [loading, setLoading] = useState(true);
   const [attachments, setAttachments] = useState<{ url: string; isUploading: boolean }[]>([]);
   const [input, setInput] = useState("");
-  const [currentArtifact, setCurrentArtifact] = useState<{ content: string, type: 'web' | 'app' | 'general' } | null>(null);
+  const [currentArtifact, setCurrentArtifact] = useState<{ content: string, type: 'web' | 'app' | 'general', isComplete: boolean } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTool, setActiveTool] = useState<'select' | 'hand'>('select');
   const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 });
@@ -82,6 +132,15 @@ export default function ProjectPage() {
   const [isDraggingFrame, setIsDraggingFrame] = useState(false);
   const dragStart = useRef({ x: 0, y: 0 });
   const [dynamicFrameHeight, setDynamicFrameHeight] = useState<number>(800);
+  const [throttledArtifact, setThrottledArtifact] = useState<{ content: string, type: 'web' | 'app' | 'general', isComplete: boolean } | null>(null);
+  const [isFrameSelected, setIsFrameSelected] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  // Refs to keep track of state in wheel event listeners without re-attaching
+  const zoomRef = useRef(zoom);
+  const canvasOffsetRef = useRef(canvasOffset);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+  useEffect(() => { canvasOffsetRef.current = canvasOffset; }, [canvasOffset]);
 
   const {
     messages,
@@ -100,15 +159,20 @@ export default function ProjectPage() {
       console.error(error);
       toast.error("Failed to connect to design engine");
     },
-    onFinish: (message) => {
+    onFinish: (message: any) => {
       const textContent = (message.parts?.find((p: any) => p.type === 'text') as any)?.text || message.content;
       if (typeof textContent === 'string') {
         const artifactData = extractArtifact(textContent);
         if (artifactData) {
           setCurrentArtifact(artifactData);
+          setThrottledArtifact(artifactData);
         }
       }
     },
+    onData: (data) => {
+       // Optional: handle custom data if backend sends it
+       console.log(data);
+    }
   });
 
   useEffect(() => {
@@ -145,25 +209,49 @@ export default function ProjectPage() {
     if (projectId) fetchProjectAndInitialize();
   }, [projectId, sendMessage, setMessages, router]);
 
+  const lastUpdateRef = useRef(Date.now());
   useEffect(() => {
     const lastAssistantMessage = (messages as any[]).filter(m => m.role === 'assistant').at(-1);
     if (lastAssistantMessage) {
-      const textContent = lastAssistantMessage.parts?.find((p: any) => p.type === 'text')?.text || lastAssistantMessage.content;
-      if (typeof textContent === 'string') {
+      const textContent = (lastAssistantMessage.parts?.find((p: any) => p.type === 'text') as any)?.text || (lastAssistantMessage as any).content;
+      if (typeof textContent === 'string' && textContent.length > 0) {
         const artifactData = extractArtifact(textContent);
         if (artifactData) {
           setCurrentArtifact(artifactData);
+          
+          // Use a throttled version for the iframe to avoid too many re-renders
+          // UNLESS it is complete, then we show it immediately
+          const now = Date.now();
+          if (artifactData.isComplete || now - lastUpdateRef.current > 1000) {
+            setThrottledArtifact(artifactData);
+            lastUpdateRef.current = now;
+          }
         }
       }
+    } else {
+      setCurrentArtifact(null);
+      setThrottledArtifact(null);
     }
-  }, [messages]);
+  }, [messages, status]);
 
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (activeTool === 'hand') {
-      setIsPanning(true);
-      dragStart.current = { x: e.clientX - canvasOffset.x, y: e.clientY - canvasOffset.y };
+  const memoizedInjectedHTML = React.useMemo(() => {
+    if (!throttledArtifact) return "";
+    return getInjectedHTML(throttledArtifact.content);
+  }, [throttledArtifact?.content]);
+
+  // Live update iframe content without reload during streaming
+  // This useEffect is now primarily for when throttledArtifact becomes complete
+  useEffect(() => {
+    if (throttledArtifact && throttledArtifact.isComplete && iframeRef.current) {
+      const content = getInjectedHTML(throttledArtifact.content);
+      // If the iframe is already rendered, update its content
+      // Otherwise, the srcDoc will handle the initial render
+      iframeRef.current.contentWindow?.postMessage({
+        type: 'UPDATE_CONTENT',
+        content
+      }, '*');
     }
-  };
+  }, [throttledArtifact?.content, throttledArtifact?.isComplete]);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -175,22 +263,16 @@ export default function ProjectPage() {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
-  const getInjectedHTML = (html: string) => {
-    const script = `
-      <script>
-        const sendHeight = () => {
-          window.parent.postMessage({ type: 'HEIGHT_UPDATE', height: document.documentElement.scrollHeight }, '*');
-        };
-        window.onload = sendHeight;
-        new ResizeObserver(sendHeight).observe(document.body);
-      </script>
-      <style>
-        ::-webkit-scrollbar { display: none; }
-        body { -ms-overflow-style: none; scrollbar-width: none; overflow-x: hidden; }
-      </style>
-    `;
-    return html.replace('</body>', `${script}</body>`);
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (activeTool === 'hand') {
+      setIsPanning(true);
+      dragStart.current = { x: e.clientX - canvasOffset.x, y: e.clientY - canvasOffset.y };
+    }
   };
+
+
+
+
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (isPanning && activeTool === 'hand') {
@@ -219,18 +301,104 @@ export default function ProjectPage() {
     }
   };
 
+  useEffect(() => {
+    const element = previewRef.current;
+    if (!element || loading) return;
+
+    const handleGlobalWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+      }
+    };
+
+    const handleWheelNative = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        
+        // Consistent scaling factor for smooth zooming
+        const scaleFactor = Math.pow(1.2, -e.deltaY / 120);
+        const prevZoom = zoomRef.current;
+        const prevOffset = canvasOffsetRef.current;
+        
+        const rect = element.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        
+        // Calculate position relative to the center of the container
+        const cx = mx - rect.width / 2;
+        const cy = my - rect.height / 2;
+
+        const newZoom = Math.min(Math.max(prevZoom * scaleFactor, 0.1), 5);
+        
+        // Zoom relative to the cursor position
+        const worldX = (cx - prevOffset.x) / prevZoom;
+        const worldY = (cy - prevOffset.y) / prevZoom;
+        
+        setZoom(newZoom);
+        setCanvasOffset({
+          x: cx - worldX * newZoom,
+          y: worldY === undefined ? prevOffset.y : cy - worldY * newZoom
+        });
+      } else {
+        setCanvasOffset(prev => ({
+          x: prev.x - e.deltaX,
+          y: prev.y - e.deltaY
+        }));
+      }
+    };
+
+    window.addEventListener('wheel', handleGlobalWheel, { passive: false });
+    element.addEventListener('wheel', handleWheelNative, { passive: false });
+    return () => {
+      window.removeEventListener('wheel', handleGlobalWheel);
+      element.removeEventListener('wheel', handleWheelNative);
+    };
+  }, [loading]);
+
   const handleWheel = (e: React.WheelEvent) => {
-    if (e.ctrlKey || e.metaKey) {
-      e.preventDefault();
-      const delta = e.deltaY > 0 ? 0.9 : 1.1;
-      setZoom(prev => Math.min(Math.max(prev * delta, 0.1), 5));
-    } else {
-      setCanvasOffset(prev => ({
-        x: prev.x - e.deltaX,
-        y: prev.y - e.deltaY
-      }));
-    }
+    // This is now handled by the native listener for preventDefault support
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isInput = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName || '');
+      
+      if (e.code === 'Space' && !isInput && !e.repeat) {
+        e.preventDefault();
+        setActiveTool('hand');
+      }
+      
+      if ((e.ctrlKey || e.metaKey) && !isInput) {
+        if (e.key === '=' || e.key === '+') {
+          e.preventDefault();
+          setZoom(prev => Math.min(prev * 1.2, 5));
+        } else if (e.key === '-') {
+          e.preventDefault();
+          setZoom(prev => Math.max(prev / 1.2, 0.1));
+        } else if (e.key === '0') {
+          e.preventDefault();
+          setZoom(1);
+          setCanvasOffset({ x: 0, y: 0 });
+          setFramePos({ x: 0, y: 0 });
+        } else {
+          setActiveTool('select');
+        }
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        setActiveTool('select');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -281,12 +449,39 @@ export default function ProjectPage() {
     setAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
+  const copyCode = () => {
+    if (!currentArtifact) return;
+    navigator.clipboard.writeText(currentArtifact.content);
+    toast.success("Code copied to clipboard");
+  };
+
+  const exportAsHTML = () => {
+    if (!currentArtifact) return;
+    const fullHTML = getInjectedHTML(currentArtifact.content);
+    const blob = new Blob([fullHTML], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `design_${projectId}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Design exported as HTML");
+  };
+
+  const openInNewTab = () => {
+    if (!currentArtifact) return;
+    const fullHTML = getInjectedHTML(currentArtifact.content);
+    const blob = new Blob([fullHTML], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  };
+
   const handleCustomSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() && attachments.length === 0) return;
     
     sendMessage({
-      text: input,
+      text: input.trim() + "\n\n---\n\n" + "Please generate a vertically expansive design. Do not include any internal scrollbars in the generated HTML. The design should be fully visible without scrolling within the iframe, with the iframe's height adjusting to fit the content.",
       files: attachments.map(a => ({ type: "file" as const, url: a.url, mediaType: "image/*" }))
     });
     
@@ -432,16 +627,9 @@ export default function ProjectPage() {
                       <Plus className="h-5 w-5" />
                     </Button>
                     <input type="file" multiple accept="image/*" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
-                    
-                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800">
-                      <div className="flex items-center justify-center font-bold text-[10px] bg-zinc-800 rounded px-1 min-w-[20px] h-5 border border-zinc-700">3x</div>
-                    </Button>
                   </div>
                   
                   <div className="flex items-center gap-2">
-                    <Button variant="ghost" className="h-8 px-2 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800 flex items-center gap-1.5 text-[11px] font-bold">
-                      3.0 Pro <ChevronDown className="h-3.5 w-3.5" />
-                    </Button>
                     <Button 
                        onClick={handleCustomSubmit}
                        disabled={(!input.trim() && attachments.length === 0) || status === 'streaming'}
@@ -466,7 +654,9 @@ export default function ProjectPage() {
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        onWheel={handleWheel}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) setIsFrameSelected(false);
+        }}
         className={cn(
           "flex-1 flex flex-col bg-muted relative overflow-hidden",
           activeTool === 'hand' ? "cursor-grab active:cursor-grabbing" : "cursor-default"
@@ -509,41 +699,130 @@ export default function ProjectPage() {
            }}
          >
             {currentArtifact ? (
-               <div 
-                 onMouseDown={startDraggingFrame}
-                 className={cn(
-                   "transition-shadow duration-300 ease-in-out shadow-[0_40px_100px_rgba(0,0,0,0.4)] overflow-hidden border border-border/50 relative bg-white select-none",
-                   activeTool === 'select' ? "cursor-move hover:border-primary/50" : "pointer-events-auto",
-                   isDraggingFrame && "shadow-[0_60px_120px_rgba(0,0,0,0.5)] border-primary",
-                   currentArtifact.type === 'app' 
-                     ? "w-[375px] aspect-[9/19.5] rounded-[3rem] border-[12px] border-zinc-900" 
-                     : currentArtifact.type === 'web'
-                       ? "w-[1200px] rounded-sm"
-                       : "w-[800px] aspect-square rounded-sm"
-                 )}
-                 style={{
-                   transform: `translate(${framePos.x}px, ${framePos.y}px)`,
-                   height: currentArtifact.type === 'web' ? `${dynamicFrameHeight}px` : undefined
-                 }}
-               >
-                  {/* Phone Notch for App Design */}
-                  {currentArtifact.type === 'app' && (
-                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-7 bg-zinc-900 rounded-b-[1.5rem] z-50 flex items-center justify-center">
-                      <div className="w-10 h-1 bg-zinc-800 rounded-full" />
-                    </div>
-                  )}
-                  
-                  <iframe 
-                    srcDoc={getInjectedHTML(currentArtifact.content)}
+                 <div 
+                   onMouseDown={(e) => {
+                     setIsFrameSelected(true);
+                     startDraggingFrame(e);
+                   }}
+                   className={cn(
+                     "group relative flex flex-col items-center select-none",
+                     activeTool === 'select' ? "cursor-move" : "pointer-events-auto"
+                   )}
+                   style={{
+                     transform: `translate(${framePos.x}px, ${framePos.y}px)`,
+                     transition: 'transform 0s'
+                   }}
+                 >
+                   {/* Top Frame Toolbar (Unified) */}
+                   {(isFrameSelected || isPanning || isDraggingFrame || throttledArtifact?.isComplete) && (
+                     <div className={cn(
+                       "absolute -top-14 left-0 right-0 flex items-center justify-between px-2 py-2 bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl z-[70] animate-in fade-in slide-in-from-bottom-2 duration-200 pointer-events-auto transition-opacity",
+                       !isFrameSelected && !isPanning && !isDraggingFrame && "opacity-0 group-hover:opacity-100"
+                     )} onMouseDown={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-1">
+                           <Button 
+                             variant="ghost" 
+                             size="sm" 
+                             className="h-9 px-3 text-zinc-400 hover:text-white hover:bg-white/10 rounded-xl flex items-center gap-2 text-[10px] font-bold"
+                             onClick={copyCode}
+                           >
+                             <Code className="h-3.5 w-3.5" />
+                             CODE
+                           </Button>
+                           <Button 
+                             variant="ghost" 
+                             size="sm" 
+                             className="h-9 px-3 text-zinc-400 hover:text-white hover:bg-white/10 rounded-xl flex items-center gap-2 text-[10px] font-bold"
+                             onClick={exportAsHTML}
+                           >
+                             <Download className="h-3.5 w-3.5" />
+                             EXPORT
+                           </Button>
+                           <Button 
+                             variant="ghost" 
+                             size="sm" 
+                             className="h-9 w-9 p-0 text-zinc-400 hover:text-white hover:bg-white/10 rounded-xl"
+                             onClick={openInNewTab}
+                             title="Open in new tab"
+                           >
+                             <ExternalLink className="h-3.5 w-3.5" />
+                           </Button>
+                           <div className="w-[1px] h-4 bg-white/10 mx-1" />
+                           <Button variant="ghost" size="icon" className="h-9 w-9 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl">
+                              <ImageIcon className="h-4 w-4" />
+                           </Button>
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                           <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-2">{currentArtifact.type}</span>
+                           <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-9 w-9 text-zinc-500 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-colors"
+                              onClick={() => {
+                                setCurrentArtifact(null);
+                                setThrottledArtifact(null);
+                                setIsFrameSelected(false);
+                              }}
+                           >
+                              <Trash2 className="h-4 w-4" />
+                           </Button>
+                        </div>
+                     </div>
+                   )}
+
+                   <div 
                     className={cn(
-                      "w-full h-full border-none bg-white",
-                      isDraggingFrame || activeTool === 'hand' ? "pointer-events-none" : "pointer-events-auto"
-                    )}
-                    title="Design Preview"
-                    sandbox="allow-scripts"
-                  />
-               </div>
-            ) : (
+                      "transition-shadow duration-300 ease-in-out shadow-[0_40px_100px_rgba(0,0,0,0.4)] overflow-hidden border border-border/50 relative bg-white",
+                      isFrameSelected && "ring-2 ring-primary border-primary",
+                      isDraggingFrame && "shadow-[0_60px_120px_rgba(0,0,0,0.5)] border-primary",
+                       currentArtifact.type === 'app' 
+                         ? "w-[380px] rounded-2xl" 
+                         : currentArtifact.type === 'web'
+                           ? "w-[1024px] rounded-lg"
+                           : "w-[800px] rounded-xl"
+                     )}
+                     style={{
+                       height: `${dynamicFrameHeight}px`,
+                       minHeight: currentArtifact.type === 'app' ? '800px' : undefined,
+                       aspectRatio: currentArtifact.type === 'app' && !dynamicFrameHeight ? '9/19' : undefined,
+                       transition: 'height 0.3s ease-in-out'
+                     }}
+                   >
+                   {currentArtifact && !currentArtifact.isComplete && (
+                     <div className="absolute inset-0 z-50 bg-zinc-50 pointer-events-none overflow-hidden flex items-center justify-center">
+                        <div className="absolute inset-0 bg-white">
+                           {/* Enhanced Shimmer Sweep */}
+                           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-zinc-200/50 to-transparent -translate-x-full animate-[shimmer_1.5s_infinite]" />
+                        </div>
+                        
+                        <div className="relative z-10 flex flex-col items-center gap-4">
+                           <div className="relative size-12">
+                              <div className="absolute inset-0 border-2 border-primary/20 rounded-full" />
+                              <div className="absolute inset-0 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                           </div>
+                           <span className="text-[12px] font-bold text-zinc-400 uppercase tracking-[0.2em] animate-pulse">
+                              Crafting Design...
+                           </span>
+                        </div>
+                     </div>
+                   )}
+                  
+                   {throttledArtifact && throttledArtifact.isComplete && (
+                       <iframe 
+                        ref={iframeRef}
+                        srcDoc={memoizedInjectedHTML}
+                        className={cn(
+                          "w-full h-full border-none bg-white transition-opacity duration-500",
+                          isDraggingFrame || activeTool === 'hand' ? "pointer-events-none" : "pointer-events-auto"
+                        )}
+                        title="Design Preview"
+                        sandbox="allow-scripts"
+                      />
+                   )}
+                   </div>
+                 </div>
+              ) : (
                <div className="flex flex-col items-center gap-6 opacity-20 pointer-events-none">
                   <Logo iconSize={80} showText={false} />
                   <p className="text-xl font-medium tracking-tight">Generate your first design to see it here</p>
@@ -576,8 +855,23 @@ export default function ProjectPage() {
                <Hand className="h-5 w-5" />
             </Button>
             <div className="w-[1px] h-6 bg-border mx-1" />
-            <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted">
-               <Search className="h-5 w-5" />
+            <Button 
+              onClick={() => setZoom(prev => Math.min(prev * 1.2, 5))}
+              variant="ghost" 
+              size="icon" 
+              className="h-10 w-10 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted"
+              title="Zoom In (Ctrl +)"
+            >
+               <ZoomIn className="h-5 w-5" />
+            </Button>
+            <Button 
+              onClick={() => setZoom(prev => Math.max(prev / 1.2, 0.1))}
+              variant="ghost" 
+              size="icon" 
+              className="h-10 w-10 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted"
+              title="Zoom Out (Ctrl -)"
+            >
+               <ZoomOut className="h-5 w-5" />
             </Button>
             <Button 
               onClick={() => {

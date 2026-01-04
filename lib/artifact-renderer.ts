@@ -1,33 +1,64 @@
 /**
  * Extracts HTML content from artifact tags in AI responses
  * Supports <artifact>, <web_artifact>, and <app_artifact>
+ * Handles partial matches for real-time streaming
  */
-export function extractArtifact(text: string): { content: string, type: 'web' | 'app' | 'general' } | null {
-  const webRegex = /<web_artifact>([\s\S]*?)<\/web_artifact>/i;
-  const appRegex = /<app_artifact>([\s\S]*?)<\/app_artifact>/i;
-  const genRegex = /<artifact>([\s\S]*?)<\/artifact>/i;
+export function extractArtifact(text: string): { content: string, type: 'web' | 'app' | 'general', isComplete: boolean } | null {
+  const tags = [
+    { start: '<web_artifact>', end: '</web_artifact>', type: 'web' as const },
+    { start: '<app_artifact>', end: '</app_artifact>', type: 'app' as const },
+    { start: '<artifact>', end: '</artifact>', type: 'general' as const },
+  ];
 
-  const webMatch = text.match(webRegex);
-  if (webMatch) return { content: webMatch[1].trim(), type: 'web' };
-
-  const appMatch = text.match(appRegex);
-  if (appMatch) return { content: appMatch[1].trim(), type: 'app' };
-
-  const genMatch = text.match(genRegex);
-  if (genMatch) return { content: genMatch[1].trim(), type: 'general' };
+  for (const tag of tags) {
+    const startIndex = text.toLowerCase().indexOf(tag.start);
+    if (startIndex !== -1) {
+      const contentStart = startIndex + tag.start.length;
+      const endIndex = text.toLowerCase().indexOf(tag.end, contentStart);
+      
+      if (endIndex !== -1) {
+        return { 
+          content: text.substring(contentStart, endIndex).trim(), 
+          type: tag.type,
+          isComplete: true 
+        };
+      } else {
+        // Handle streaming: return content up to current end of string
+        return { 
+          content: text.substring(contentStart).trim(), 
+          type: tag.type,
+          isComplete: false 
+        };
+      }
+    }
+  }
 
   return null;
 }
 
 /**
  * Removes all types of artifact blocks from text for display
+ * Also removes partial tags at the end of strings during streaming
  */
 export function stripArtifact(text: string): string {
-  return text
+  let cleaned = text;
+  
+  // Remove full artifacts
+  cleaned = cleaned
     .replace(/<web_artifact>[\s\S]*?<\/web_artifact>/gi, '')
     .replace(/<app_artifact>[\s\S]*?<\/app_artifact>/gi, '')
-    .replace(/<artifact>[\s\S]*?<\/artifact>/gi, '')
-    .trim();
+    .replace(/<artifact>[\s\S]*?<\/artifact>/gi, '');
+
+  // Remove trailing open tags
+  const openTags = ['<web_artifact>', '<app_artifact>', '<artifact>'];
+  for (const tag of openTags) {
+    const lastOpen = cleaned.toLowerCase().lastIndexOf(tag);
+    if (lastOpen !== -1) {
+      cleaned = cleaned.substring(0, lastOpen);
+    }
+  }
+
+  return cleaned.trim();
 }
 
 /**

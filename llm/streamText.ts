@@ -2,6 +2,7 @@ import {
   streamText as _streamText,
   convertToModelMessages,
   StreamTextOnFinishCallback,
+  UIMessage,
 } from "ai";
 import { MAXIMUM_OUTPUT_TOKENS } from "@/lib/constants";
 import { GeminiModel } from "./model";
@@ -11,7 +12,7 @@ export interface StreamTextOptions {
   onFinish?: StreamTextOnFinishCallback<any>;
 }
 
-export async function streamText(messages: any[], options?: StreamTextOptions) {
+export async function streamText(messages: UIMessage[], options?: StreamTextOptions) {
   const { onFinish } = options || {};
 
   return _streamText({
