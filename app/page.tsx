@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Plus,
   ArrowRight,
@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   Globe,
   X,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
@@ -29,11 +30,20 @@ import {
 } from "@/components/ui/drawer";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { toast } from "sonner";
 
-const PROMPTS = [
-  "Quiz page in a language learning app with a progress bar at the top. The title challenges you to match a Spanish word with the correct answer, offering four possible options.",
-  "Mobile-responsive ecommerce home page for a bird watching gear store",
-];
+const PROMPTS = {
+  app: [
+    "Quiz page in a language learning app with a progress bar at the top and four options.",
+    "Fitness tracker dashboard with heart rate graph and daily step goal ring.",
+    "Food delivery app home screen with categorized restaurant listings and deals.",
+  ],
+  web: [
+    "Mobile-responsive ecommerce home page for a bird watching gear store.",
+    "SaaS landing page with feature grid, pricing cards, and customer testimonials.",
+    "Modern portfolio website for a 3D artist showcasing a gallery of work.",
+  ]
+};
 
 const SECTIONS = [
   {
@@ -64,14 +74,81 @@ const SECTIONS = [
   },
 ];
 
+interface Attachment {
+  url: string;
+  isUploading: boolean;
+}
+
 export default function Home() {
-  const [activeTab, setActiveTab] = useState("app");
+  const [activeTab, setActiveTab] = useState<'app' | 'web'>("app");
   const [inputValue, setInputValue] = useState("");
   const [isMounted, setIsMounted] = useState(false);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const fileList = Array.from(files);
+    
+    // Add temporary uploading placeholders
+    const newPlaceholders = fileList.map(file => ({
+      url: URL.createObjectURL(file),
+      isUploading: true
+    }));
+    
+    setAttachments(prev => [...prev, ...newPlaceholders]);
+
+    for (let i = 0; i < fileList.length; i++) {
+      const file = fileList[i];
+      const placeholderUrl = newPlaceholders[i].url;
+
+      try {
+        const sigRes = await fetch("/api/cloudinary-signature");
+        if (!sigRes.ok) throw new Error("Failed to get upload signature");
+        
+        const sigData = await sigRes.json();
+        const uploadApi = `https://api.cloudinary.com/v1_1/${sigData.cloudName}/upload`;
+
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("api_key", sigData.apiKey);
+        formData.append("timestamp", sigData.timestamp.toString());
+        formData.append("signature", sigData.signature);
+        formData.append("folder", sigData.folder || "sketch-wireframe-to-design");
+
+        const uploadRes = await fetch(uploadApi, {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!uploadRes.ok) throw new Error("Cloudinary upload failed");
+
+        const uploadData = await uploadRes.json();
+        
+        setAttachments(prev => prev.map(attr => 
+          attr.url === placeholderUrl 
+            ? { url: uploadData.secure_url, isUploading: false } 
+            : attr
+        ));
+      } catch (error) {
+        console.error("Upload error:", error);
+        toast.error(`Failed to upload ${file.name}`);
+        setAttachments(prev => prev.filter(attr => attr.url !== placeholderUrl));
+      }
+    }
+
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index));
+  };
 
   if (!isMounted) return null;
 
@@ -139,11 +216,49 @@ export default function Home() {
             </div>
 
             {/* Premium Chat Input */}
-            <div className="relative group">
+            <div className="relative group w-full">
               {/* Outer Glow Overlay */}
-              <div className="absolute -inset-[1px] rounded-[24px] bg-gradient-to-r from-purple-500/10 to-transparent opacity-0 group-focus-within:opacity-100 transition-opacity duration-700 blur-md pointer-events-none" />
+              <div className={cn(
+                "absolute -inset-[1px] rounded-[32px] opacity-0 group-focus-within:opacity-100 transition-all duration-700 blur-xl pointer-events-none",
+                activeTab === 'app' ? "bg-purple-500/20" : "bg-blue-500/20"
+              )} />
               
-              <div className="relative bg-card rounded-[24px] p-6 space-y-4 border border-border group-focus-within:border-purple-500/30 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5)] transition-all">
+              <div className={cn(
+                "relative bg-card rounded-[32px] p-8 space-y-4 border transition-all duration-500 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.6)]",
+                activeTab === 'app' 
+                  ? "border-purple-500/10 group-focus-within:border-purple-500/40 group-focus-within:shadow-[0_0_40px_-5px_rgba(168,85,247,0.15)]" 
+                  : "border-blue-500/10 group-focus-within:border-blue-500/40 group-focus-within:shadow-[0_0_40px_-5px_rgba(59,130,246,0.15)]"
+              )}>
+                
+                {/* Image Previews */}
+                <AnimatePresence>
+                  {attachments.length > 0 && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      className="flex flex-wrap gap-3 pb-2"
+                    >
+                      {attachments.map((attr, i) => (
+                        <div key={i} className="relative group/img h-20 w-20 rounded-xl overflow-hidden border border-border bg-secondary shadow-sm">
+                          <img src={attr.url} alt="Attachment" className={cn("h-full w-full object-cover", attr.isUploading && "opacity-40 blur-[2px]")} />
+                          {attr.isUploading && (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <Loader2 className="h-5 w-5 text-white animate-spin" />
+                            </div>
+                          )}
+                          <button 
+                            onClick={() => removeAttachment(i)}
+                            className="absolute top-1 right-1 h-5 w-5 bg-black/60 rounded-full flex items-center justify-center text-white opacity-0 group-hover/img:opacity-100 transition-opacity"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
                 <textarea
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
@@ -152,13 +267,28 @@ export default function Home() {
                 />
 
                 <div className="flex items-center justify-between">
-                  <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full bg-secondary/50 text-muted-foreground hover:text-foreground border border-border/50">
+                  {/* Hidden File Input */}
+                  <input 
+                    type="file" 
+                    multiple 
+                    accept="image/*" 
+                    className="hidden" 
+                    ref={fileInputRef}
+                    onChange={handleFileUpload}
+                  />
+
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={() => fileInputRef.current?.click()}
+                    className="h-10 w-10 rounded-full bg-secondary/50 text-muted-foreground hover:text-foreground border border-border/50"
+                  >
                     <Plus className="h-5 w-5" />
                   </Button>
                   
                   <div className="flex items-center gap-2">
                     <Button 
-                       disabled={!inputValue.trim()}
+                       disabled={(!inputValue.trim() && attachments.length === 0) || attachments.some(a => a.isUploading)}
                        className="h-10 w-10 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-30 p-0 border border-border/10"
                     >
                       <ArrowRight className="h-5 w-5" />
@@ -172,10 +302,14 @@ export default function Home() {
             <div className="space-y-4">
                <h3 className="text-[11px] font-black text-muted-foreground ml-1 uppercase tracking-widest">Try these prompts</h3>
                <div className="flex flex-col gap-3">
-                  {PROMPTS.map((prompt, i) => (
+                  {PROMPTS[activeTab].map((prompt: string, i: number) => (
                     <button
                       key={i}
-                      className="w-full p-4 rounded-xl bg-card border border-border text-left text-sm text-muted-foreground font-medium hover:bg-secondary hover:border-border transition-all leading-snug shadow-sm"
+                      onClick={() => {
+                        setInputValue(prompt);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                      className="w-full p-4 rounded-xl bg-card border border-border text-left text-sm text-muted-foreground font-medium hover:bg-secondary hover:border-border transition-all leading-snug shadow-sm active:scale-[0.98]"
                     >
                       {prompt}
                     </button>
@@ -253,5 +387,3 @@ function MobileMenu() {
     </Drawer>
   );
 }
-
-// End of file cleanup
