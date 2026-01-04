@@ -148,7 +148,7 @@ export default function Home() {
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   placeholder="Describe your design"
-                  className="w-full h-32 bg-transparent outline-none resize-none text-lg text-foreground placeholder:text-muted-foreground/50 font-medium leading-relaxed"
+                  className="w-full h-32 bg-transparent outline-none resize-none text-lg text-foreground placeholder:text-muted-foreground/50 font-medium leading-relaxed hide-scrollbar"
                 />
 
                 <div className="flex items-center justify-between">
@@ -157,21 +157,6 @@ export default function Home() {
                   </Button>
                   
                   <div className="flex items-center gap-2">
-                    {/* Tiny Extension Icons */}
-                    <div className="flex items-center gap-1.5 mr-2">
-                       <div className="h-6 w-11 bg-secondary rounded-full flex items-center justify-around px-1 border border-border">
-                          <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-                          <Globe className="h-3 w-3 text-emerald-500" />
-                       </div>
-                    </div>
-
-                    {/* Model Switcher */}
-                    <div className="flex items-center gap-2 bg-secondary px-3 py-1.5 rounded-full border border-border hover:bg-secondary/80 transition-colors cursor-pointer group/model">
-                      <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
-                      <span className="text-[12px] font-bold text-muted-foreground group-hover/model:text-foreground">3.0 Pro</span>
-                      <ChevronDown className="h-3 w-3 text-muted-foreground/60" />
-                    </div>
-
                     <Button 
                        disabled={!inputValue.trim()}
                        className="h-10 w-10 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-30 p-0 border border-border/10"
