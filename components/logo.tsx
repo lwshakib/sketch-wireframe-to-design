@@ -15,16 +15,16 @@ export const LogoIcon = ({
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
+      viewBox="0 0 48 48"
       width={size}
       height={size}
       className={className}
       {...rest}
     >
-      <path
-        fill={fill}
-        d="M12 2L4.5 20.29L5.21 21L12 18L18.79 21L19.5 20.29L12 2Z"
-      />
+      <g fill={fill}>
+        <circle cx="18" cy="18" r="14" opacity=".7" />
+        <circle cx="30" cy="30" r="14" opacity=".7" />
+      </g>
     </svg>
   );
 };
@@ -33,28 +33,37 @@ export interface LogoProps {
   className?: string;
   iconSize?: number | string;
   textSize?: string;
+  showText?: boolean;
+  showBadge?: boolean;
 }
 
 export const Logo = ({
   className = "",
   iconSize = 24,
   textSize = "1.5rem",
+  showText = true,
+  showBadge = true,
 }: LogoProps): React.ReactElement => {
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      <span
-        style={{
-          fontSize: textSize,
-          fontWeight: 600,
-          letterSpacing: "-0.01em",
-        }}
-        className="text-white"
-      >
-        Sketch
-      </span>
-      <div className="bg-zinc-800 text-[10px] px-2 py-0.5 rounded-full text-zinc-400 font-bold border border-zinc-700">
-        BETA
-      </div>
+      <LogoIcon size={iconSize} className="text-white" />
+      {showText && (
+        <span
+          style={{
+            fontSize: textSize,
+            fontWeight: 600,
+            letterSpacing: "-0.01em",
+          }}
+          className="text-white"
+        >
+          Sketch
+        </span>
+      )}
+      {showBadge && (
+        <div className="bg-zinc-800 text-[10px] px-2 py-0.5 rounded-full text-zinc-400 font-bold border border-zinc-700">
+          BETA
+        </div>
+      )}
     </div>
   );
 };

@@ -74,6 +74,8 @@ const SECTIONS = [
   },
 ];
 
+import { useRouter } from "next/navigation";
+
 interface Attachment {
   url: string;
   isUploading: boolean;
@@ -84,11 +86,53 @@ export default function Home() {
   const [inputValue, setInputValue] = useState("");
   const [isMounted, setIsMounted] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  const onSubmit = async () => {
+    if (!inputValue.trim() && attachments.length === 0) return;
+    if (attachments.some(a => a.isUploading)) {
+      toast.error("Please wait for images to finish uploading");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch("/api/projects", {
+        method: "POST",
+        body: JSON.stringify({
+          title: inputValue.slice(0, 30) || "Untitled Design",
+          type: activeTab,
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to create project");
+      }
+
+      const project = await response.json();
+      
+      // Store initial prompt for the project page to pick up
+      if (inputValue.trim() || attachments.length > 0) {
+        sessionStorage.setItem(`pending_prompt_${project.id}`, JSON.stringify({
+          content: inputValue,
+          attachments: attachments.map(a => a.url)
+        }));
+      }
+
+      router.push(`/project/${project.id}`);
+    } catch (error) {
+      console.error("Submission error:", error);
+      toast.error("Something went wrong. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -288,10 +332,15 @@ export default function Home() {
                   
                   <div className="flex items-center gap-2">
                     <Button 
-                       disabled={(!inputValue.trim() && attachments.length === 0) || attachments.some(a => a.isUploading)}
+                       onClick={onSubmit}
+                       disabled={(!inputValue.trim() && attachments.length === 0) || attachments.some(a => a.isUploading) || isSubmitting}
                        className="h-10 w-10 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-30 p-0 border border-border/10"
                     >
-                      <ArrowRight className="h-5 w-5" />
+                      {isSubmitting ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        <ArrowRight className="h-5 w-5" />
+                      )}
                     </Button>
                   </div>
                 </div>
