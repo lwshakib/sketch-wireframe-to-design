@@ -46,6 +46,7 @@ import {
   MoreHorizontal,
   Tablet,
   Palette,
+  Square,
   Save,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -98,6 +99,8 @@ interface Project {
 }
 
 
+const SELECTION_BLUE = '#3b82f6';
+
 const getInjectedHTML = (html: string) => {
   const script = `
     <script>
@@ -123,14 +126,18 @@ const getInjectedHTML = (html: string) => {
         observer.observe(document.body, { 
           childList: true, 
           subtree: true, 
-          attributes: true 
+          attributes: true,
+          characterData: true
         });
-        // Multi-stage check to handle complex layouts/late loads
-        setTimeout(sendHeight, 100);
-        setTimeout(sendHeight, 500);
-        setTimeout(sendHeight, 1000);
-        setTimeout(sendHeight, 3000);
+        // More aggressive multi-stage check for slow loading assets/images
+        [100, 300, 600, 1000, 2000, 4000].forEach(delay => setTimeout(sendHeight, delay));
       };
+
+      // Listen for image loads specifically
+      window.addEventListener('load', sendHeight);
+      document.addEventListener('readystatechange', () => {
+        if (document.readyState === 'complete') sendHeight();
+      });
 
       try {
         new ResizeObserver(sendHeight).observe(document.documentElement);
@@ -284,6 +291,11 @@ export default function ProjectPage() {
   const [isRegenerateDialogOpen, setIsRegenerateDialogOpen] = useState(false);
   const [regenerateInstructions, setRegenerateInstructions] = useState("");
   const [processingArtifact, setProcessingArtifact] = useState<Artifact | null>(null);
+  const [isResizing, setIsResizing] = useState(false);
+  const [resizingHandle, setResizingHandle] = useState<string | null>(null);
+  const resizingStartSize = useRef({ width: 0, height: 0 });
+  const resizingStartPos = useRef({ x: 0, y: 0 });
+  const resizingStartFramePos = useRef({ x: 0, y: 0 });
 
   // Refs to keep track of state in wheel event listeners without re-attaching
   const zoomRef = useRef(zoom);
@@ -771,6 +783,7 @@ export default function ProjectPage() {
   }, [throttledArtifacts.length]);
 
   const handleMouseMove = (e: React.MouseEvent) => {
+    e.preventDefault();
     if (isPanning && activeTool === 'hand') {
       setCanvasOffset({
         x: e.clientX - dragStart.current.x,
@@ -794,12 +807,75 @@ export default function ProjectPage() {
           }
           return next;
       });
+    } else if (isResizing && selectedArtifactIndex !== null && resizingHandle) {
+      const dx = (e.clientX - resizingStartPos.current.x) / zoom;
+      const dy = (e.clientY - resizingStartPos.current.y) / zoom;
+      
+      const updateArtifact = (prev: Artifact[]) => {
+        const next = [...prev];
+        const art = next[selectedArtifactIndex];
+        if (!art) return prev;
+        
+        let newWidth = resizingStartSize.current.width;
+        let newHeight = resizingStartSize.current.height;
+        let newX = resizingStartFramePos.current.x;
+        let newY = resizingStartFramePos.current.y;
+        
+        if (resizingHandle.includes('right')) {
+          newWidth = Math.max(200, resizingStartSize.current.width + dx);
+        }
+        if (resizingHandle.includes('left')) {
+          const deltaWidth = resizingStartSize.current.width - dx;
+          if (deltaWidth > 200) {
+            newWidth = deltaWidth;
+            newX = resizingStartFramePos.current.x + dx;
+          }
+        }
+        if (resizingHandle.includes('bottom')) {
+          newHeight = Math.max(200, resizingStartSize.current.height + dy);
+        }
+        if (resizingHandle.includes('top')) {
+          const deltaHeight = resizingStartSize.current.height - dy;
+          if (deltaHeight > 200) {
+            newHeight = deltaHeight;
+            newY = resizingStartFramePos.current.y + dy;
+          }
+        }
+        
+        next[selectedArtifactIndex] = { ...art, width: newWidth, height: newHeight, x: newX, y: newY };
+        return next;
+      };
+
+      setThrottledArtifacts(updateArtifact);
+      setArtifacts(updateArtifact);
     }
   };
 
   const handleMouseUp = () => {
     setIsPanning(false);
     setIsDraggingFrame(false);
+    setIsResizing(false);
+    setResizingHandle(null);
+  };
+
+  const startResizing = (e: React.MouseEvent, index: number, handle: string) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setIsResizing(true);
+    setResizingHandle(handle);
+    setSelectedArtifactIndex(index);
+    
+    const art = throttledArtifacts[index];
+    const mode = artifactPreviewModes[index];
+    const defaultWidth = mode === 'mobile' ? 380 : mode === 'tablet' ? 768 : mode === 'desktop' ? 1280 : (art.type === 'app' ? 380 : 1024);
+    const defaultHeight = dynamicFrameHeights[index] || 800;
+
+    resizingStartSize.current = { 
+      width: art.width || defaultWidth, 
+      height: art.height || defaultHeight 
+    };
+    resizingStartPos.current = { x: e.clientX, y: e.clientY };
+    resizingStartFramePos.current = { x: art.x || 0, y: art.y || 0 };
   };
 
   const startDraggingFrame = (e: React.MouseEvent, index: number) => {
@@ -1001,6 +1077,12 @@ export default function ProjectPage() {
 
   const handleCustomSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (status === 'streaming' || status === 'submitted') {
+      stop();
+      return;
+    }
+
     if (!input.trim() && attachments.length === 0) return;
     
     sendMessage({
@@ -1013,6 +1095,11 @@ export default function ProjectPage() {
   };
 
   const handleArtifactAction = (action: 'more' | 'regenerate' | 'variations', artifact: Artifact) => {
+    if (status !== 'ready') {
+      toast.warning("Stitch is busy with another task. Please wait a moment.");
+      return;
+    }
+
     let prompt = "";
     if (action === 'more') {
         prompt = `Based on the design of the "${artifact.title}" screen, create 2-3 additional screens that would naturally belong in this same flow (e.g., if this is a dashboard, create a settings Page, a user profile, and a detailed analytics view). Maintain strict visual consistency with the existing design system, colors, and typography.`;
@@ -1027,11 +1114,16 @@ export default function ProjectPage() {
 
     if (prompt) {
         sendMessage({ text: prompt });
-        toast.info(action === 'more' ? "Architecting more pages..." : action === 'regenerate' ? "Regenerating screen..." : "Exploring variations...");
+        toast.info(action === 'more' ? "Architecting more pages..." : "Exploring variations...");
     }
   };
 
   const handleRegenerateSubmit = () => {
+    if (status !== 'ready') {
+      toast.warning("Stitch is busy. Please wait for the current task to finish.");
+      return;
+    }
+    
     if (!processingArtifact) return;
     
     let prompt = "";
@@ -1281,13 +1373,20 @@ export default function ProjectPage() {
                           handleCustomSubmit(e);
                         }
                       }}
-                      placeholder="Describe your design"
+                      readOnly={status !== 'ready'}
+                      placeholder={status === 'ready' ? "Describe your design" : "Processing vision..."}
                       className="w-full bg-transparent outline-none resize-none text-[14px] text-foreground placeholder:text-muted-foreground min-h-[40px] max-h-[200px]"
                     />
 
                     <div className="flex items-center justify-between mt-2 pt-2 border-t border-zinc-800/50">
                       <div className="flex items-center gap-1.5">
-                        <Button onClick={() => fileInputRef.current?.click()} variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800">
+                        <Button 
+                          onClick={() => fileInputRef.current?.click()} 
+                          variant="ghost" 
+                          size="icon" 
+                          disabled={status !== 'ready'}
+                          className="h-8 w-8 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800"
+                        >
                           <Plus className="h-5 w-5" />
                         </Button>
                         <input type="file" multiple accept="image/*" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
@@ -1296,10 +1395,19 @@ export default function ProjectPage() {
                       <div className="flex items-center gap-2">
                         <Button 
                            onClick={handleCustomSubmit}
-                           disabled={(!input.trim() && attachments.length === 0) || status === 'streaming'}
-                           className="h-8 w-8 rounded-lg p-0 bg-white hover:bg-zinc-200 text-black shadow-lg"
+                           disabled={status === 'ready' && (!input.trim() && attachments.length === 0)}
+                           className={cn(
+                             "h-8 w-8 rounded-lg p-0 shadow-lg transition-all",
+                             (status === 'streaming' || status === 'submitted') 
+                               ? "bg-red-500 hover:bg-red-600 text-white" 
+                               : "bg-white hover:bg-zinc-200 text-black"
+                           )}
                         >
-                          <ArrowRight className="h-4 w-4" />
+                          {(status === 'streaming' || status === 'submitted') ? (
+                            <Square className="h-3 w-3 fill-current" />
+                          ) : (
+                            <ArrowRight className="h-4 w-4" />
+                          )}
                         </Button>
                       </div>
                     </div>
@@ -1362,20 +1470,22 @@ export default function ProjectPage() {
          </header>
 
          {/* Content Layer */}
-         <div 
-           className="absolute inset-0 flex items-center justify-center transition-transform duration-75 ease-out select-none"
-           style={{
-             transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${zoom})`
-           }}
-         >
-            {throttledArtifacts.length > 0 ? (
-              <div 
-                className="flex items-start gap-32 p-32"
-                style={{
-                  transform: `translate(${framePos.x}px, ${framePos.y}px)`,
-                  transition: isDraggingFrame ? 'none' : 'transform 0.1s ease-out'
-                }}
-              >
+          <div 
+            className={cn(
+                "absolute inset-0 flex items-center justify-center select-none",
+                !isDraggingFrame && !isResizing && "transition-transform duration-75 ease-out"
+            )}
+            style={{
+              transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${zoom})`
+            }}
+          >
+             {throttledArtifacts.length > 0 ? (
+               <div 
+                 className="relative"
+                 style={{
+                   transform: `translate(${framePos.x}px, ${framePos.y}px)`,
+                 }}
+               >
                 {throttledArtifacts.map((artifact, index) => (
                   <div 
                     key={index}
@@ -1385,15 +1495,15 @@ export default function ProjectPage() {
                         startDraggingFrame(e, index);
                       }
                     }}
-                    className={cn(
-                      "group relative flex flex-col items-center select-none",
-                      activeTool === 'hand' ? "cursor-grab" : "cursor-default"
-                    )}
-                    style={{
-                      transform: `translate(${artifact.x || 0}px, ${artifact.y || 0}px)`,
-                      transition: isDraggingFrame && selectedArtifactIndex === index ? 'none' : 'transform 0.1s ease-out'
-                    }}
-                  >
+                     className={cn(
+                       "group absolute top-0 left-0 select-none",
+                       activeTool === 'hand' ? "cursor-grab" : "cursor-default"
+                     )}
+                     style={{
+                       transform: `translate(${artifact.x || 0}px, ${artifact.y || 0}px)`,
+                       transition: isDraggingFrame && selectedArtifactIndex === index ? 'none' : isResizing ? 'none' : 'transform 0.2s ease-out'
+                     }}
+                   >
                     {/* Modern Floating Toolbar */}
                     {(selectedArtifactIndex === index || isPanning || isDraggingFrame || (artifact.isComplete && selectedArtifactIndex === index)) && (
                       <div className={cn(
@@ -1408,9 +1518,14 @@ export default function ProjectPage() {
                               <Button 
                                 variant="ghost" 
                                 size="sm" 
-                                className="h-9 px-3 text-white hover:bg-white/10 rounded-xl flex items-center gap-2 text-[13px] font-medium"
+                                disabled={status !== 'ready'}
+                                className="h-9 px-3 text-white hover:bg-white/10 rounded-xl flex items-center gap-2 text-[13px] font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                               >
-                                <Sparkles className="h-4 w-4 text-indigo-400" />
+                                {status !== 'ready' ? (
+                                  <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />
+                                ) : (
+                                  <Sparkles className="h-4 w-4 text-indigo-400" />
+                                )}
                                 Generate
                                 <ChevronDown className="h-3.5 w-3.5 opacity-50" />
                               </Button>
@@ -1443,6 +1558,7 @@ export default function ProjectPage() {
                           <Button 
                             variant="ghost" 
                             size="icon" 
+                            disabled={status !== 'ready'}
                             onClick={() => {
                                 if (leftSidebarMode === 'properties') {
                                     setLeftSidebarMode('chat');
@@ -1452,7 +1568,7 @@ export default function ProjectPage() {
                                 }
                             }}
                             className={cn(
-                                "h-9 w-9 text-white rounded-xl flex items-center justify-center transition-all",
+                                "h-9 w-9 text-white rounded-xl flex items-center justify-center transition-all disabled:opacity-30",
                                 leftSidebarMode === 'properties' ? "bg-indigo-600 shadow-lg shadow-indigo-500/20" : "hover:bg-white/10"
                             )}
                             title="Edit Mode"
@@ -1463,6 +1579,7 @@ export default function ProjectPage() {
                           <Button 
                             variant="ghost" 
                             size="icon" 
+                            disabled={status !== 'ready'}
                             onClick={() => {
                                 if (leftSidebarMode === 'theme') {
                                     setLeftSidebarMode('chat');
@@ -1471,7 +1588,7 @@ export default function ProjectPage() {
                                 }
                             }}
                             className={cn(
-                                "h-9 w-9 text-white rounded-xl flex items-center justify-center transition-all",
+                                "h-9 w-9 text-white rounded-xl flex items-center justify-center transition-all disabled:opacity-30",
                                 leftSidebarMode === 'theme' ? "bg-indigo-600 shadow-lg shadow-indigo-500/20" : "hover:bg-white/10"
                             )}
                             title="Theme Settings"
@@ -1618,11 +1735,10 @@ export default function ProjectPage() {
                       </div>
                     )}
 
-                    <div 
-                     className={cn(
-                       "transition-all duration-300 ease-in-out shadow-[0_40px_100px_rgba(0,0,0,0.4)] overflow-hidden border relative flex-shrink-0",
-                       selectedArtifactIndex === index && "ring-2",
-                       isDraggingFrame && selectedArtifactIndex === index && "shadow-[0_60px_120px_rgba(0,0,0,0.5)]",
+                     <div 
+                      className={cn(
+                        "transition-all duration-300 ease-in-out shadow-[0_40px_100px_rgba(0,0,0,0.4)] overflow-hidden border relative flex-shrink-0",
+                        isDraggingFrame && selectedArtifactIndex === index && "shadow-[0_60px_120px_rgba(0,0,0,0.5)]",
                         (() => {
                          const mode = artifactPreviewModes[index];
                          if (mode === 'mobile') return "w-[380px] rounded-sm";
@@ -1636,53 +1752,103 @@ export default function ProjectPage() {
                              : "w-[600px] rounded-sm";
                         })()
                       )}
-                       style={{
-                         height: !artifactPreviewModes[index] && artifact.type !== 'app' && artifact.type !== 'web' 
-                           ? "600px" 
-                           : `${dynamicFrameHeights[index] || (artifactPreviewModes[index] === 'mobile' || (artifact.type === 'app' && !artifactPreviewModes[index]) ? 800 : 700)}px`,
-                         minHeight: (artifactPreviewModes[index] === 'mobile' || (artifact.type === 'app' && !artifactPreviewModes[index])) ? '800px' : '400px',
-                         aspectRatio: (artifactPreviewModes[index] === 'mobile' || (artifact.type === 'app' && !artifactPreviewModes[index])) && !dynamicFrameHeights[index] ? '9/19' : (artifact.type !== 'app' && artifact.type !== 'web' && !artifactPreviewModes[index]) ? '1/1' : undefined,
-                         transition: 'width 0.3s ease-in-out',
-                         backgroundColor: appliedTheme?.cssVars.background || 'var(--background)',
-                         borderColor: selectedArtifactIndex === index ? (appliedTheme?.cssVars.primary || 'var(--primary)') : (appliedTheme?.cssVars.border || 'var(--border)'),
-                         boxShadow: selectedArtifactIndex === index ? `0 0 0 2px ${appliedTheme?.cssVars.primary || 'var(--primary)'}40, 0 40px 100px rgba(0,0,0,0.4)` : undefined
-                       }}
-                    >
-                       {/* Selection Handles */}
-                       {selectedArtifactIndex === index && (
-                         <>
-                           <div 
-                             className="absolute top-0 left-0 w-2.5 h-2.5 border border-white z-[60] -translate-x-1/2 -translate-y-1/2 rounded-full" 
-                             style={{ backgroundColor: appliedTheme?.cssVars.primary || 'var(--primary)' }}
-                           />
-                           <div 
-                             className="absolute top-0 right-0 w-2.5 h-2.5 border border-white z-[60] translate-x-1/2 -translate-y-1/2 rounded-full" 
-                             style={{ backgroundColor: appliedTheme?.cssVars.primary || 'var(--primary)' }}
-                           />
-                           <div 
-                             className="absolute bottom-0 left-0 w-2.5 h-2.5 border border-white z-[60] -translate-x-1/2 translate-y-1/2 rounded-full" 
-                             style={{ backgroundColor: appliedTheme?.cssVars.primary || 'var(--primary)' }}
-                           />
-                           <div 
-                             className="absolute bottom-0 right-0 w-2.5 h-2.5 border border-white z-[60] translate-x-1/2 translate-y-1/2 rounded-full" 
-                             style={{ backgroundColor: appliedTheme?.cssVars.primary || 'var(--primary)' }}
-                           />
-                         </>
+                        style={{
+                          width: artifact.width ? `${artifact.width}px` : (() => {
+                            const mode = artifactPreviewModes[index];
+                            if (mode === 'mobile') return "380px";
+                            if (mode === 'tablet') return "768px";
+                            if (mode === 'desktop') return "1280px";
+                            return artifact.type === 'app' ? "380px" : artifact.type === 'web' ? "1024px" : "600px";
+                          })(),
+                          height: artifact.height ? `${artifact.height}px` : `${dynamicFrameHeights[index] || (artifactPreviewModes[index] === 'mobile' || (artifact.type === 'app' && !artifactPreviewModes[index]) ? 800 : 700)}px`,
+                          minHeight: (artifactPreviewModes[index] === 'mobile' || (artifact.type === 'app' && !artifactPreviewModes[index])) ? '800px' : '400px',
+                          transition: isResizing ? 'none' : 'width 0.3s ease-in-out, height 0.3s ease-in-out',
+                          backgroundColor: appliedTheme?.cssVars.background || 'var(--background)',
+                          borderColor: selectedArtifactIndex === index ? SELECTION_BLUE : (appliedTheme?.cssVars.border || 'var(--border)'),
+                          boxShadow: selectedArtifactIndex === index ? `0 0 0 2px ${SELECTION_BLUE}40, 0 40px 100px rgba(0,0,0,0.4)` : undefined
+                        }}
+                     >
+                        {!artifact.isComplete && <ModernShimmer type={artifact.type} appliedTheme={appliedTheme} />}
+                    
+                     <iframe 
+                       ref={el => { iframeRefs.current[index] = el; }}
+                       srcDoc={getInjectedHTML(artifact.content)}
+                       loading="eager"
+                       scrolling="no"
+                       className={cn(
+                         "w-full h-full border-none overflow-hidden",
+                         (activeTool === 'select' || activeTool === 'hand' || isDraggingFrame) && !isEditMode ? "pointer-events-none" : "pointer-events-auto"
                        )}
-                     {!artifact.isComplete && <ModernShimmer type={artifact.type} appliedTheme={appliedTheme} />}
-                   
-                    <iframe 
-                      ref={el => { iframeRefs.current[index] = el; }}
-                      srcDoc={getInjectedHTML(artifact.content)}
-                      loading="eager"
-                      scrolling="no"
-                      className={cn(
-                        "w-full h-full border-none overflow-hidden",
-                        (activeTool === 'select' || activeTool === 'hand' || isDraggingFrame) && !isEditMode ? "pointer-events-none" : "pointer-events-auto"
-                      )}
-                      title={artifact.title}
-                    />
-                    </div>
+                       title={artifact.title}
+                     />
+                     </div>
+
+                     {/* Selection Overlays & Handles (Outside overflow-hidden) */}
+                     {selectedArtifactIndex === index && (
+                       <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 80 }}>
+                          {/* Corner Handles */}
+                          <div 
+                            onMouseDown={(e) => startResizing(e, index, 'top-left')}
+                            className="absolute top-0 left-0 w-2 h-2 border border-white pointer-events-auto cursor-nwse-resize -translate-x-1/2 -translate-y-1/2" 
+                            style={{ backgroundColor: SELECTION_BLUE }}
+                          />
+                          <div 
+                            onMouseDown={(e) => startResizing(e, index, 'top-right')}
+                            className="absolute top-0 right-0 w-2 h-2 border border-white pointer-events-auto cursor-nesw-resize translate-x-1/2 -translate-y-1/2" 
+                            style={{ backgroundColor: SELECTION_BLUE }}
+                          />
+                          <div 
+                            onMouseDown={(e) => startResizing(e, index, 'bottom-left')}
+                            className="absolute bottom-0 left-0 w-2 h-2 border border-white pointer-events-auto cursor-nesw-resize -translate-x-1/2 translate-y-1/2" 
+                            style={{ backgroundColor: SELECTION_BLUE }}
+                          />
+                          <div 
+                            onMouseDown={(e) => startResizing(e, index, 'bottom-right')}
+                            className="absolute bottom-0 right-0 w-2 h-2 border border-white pointer-events-auto cursor-nwse-resize translate-x-1/2 translate-y-1/2" 
+                            style={{ backgroundColor: SELECTION_BLUE }}
+                          />
+
+                          {/* Edge Resize Hit-Areas (Invisible but active) */}
+                          <div 
+                            onMouseDown={(e) => startResizing(e, index, 'top')}
+                            className="absolute top-0 left-0 right-0 h-2 -translate-y-1/2 pointer-events-auto cursor-ns-resize hover:bg-blue-500/10"
+                          />
+                          <div 
+                            onMouseDown={(e) => startResizing(e, index, 'bottom')}
+                            className="absolute bottom-0 left-0 right-0 h-2 translate-y-1/2 pointer-events-auto cursor-ns-resize hover:bg-blue-500/10"
+                          />
+                          <div 
+                            onMouseDown={(e) => startResizing(e, index, 'left')}
+                            className="absolute top-0 bottom-0 w-2 -translate-x-1/2 pointer-events-auto cursor-ew-resize hover:bg-blue-500/10"
+                          />
+                          <div 
+                            onMouseDown={(e) => startResizing(e, index, 'right')}
+                            className="absolute top-0 bottom-0 w-2 translate-x-1/2 pointer-events-auto cursor-ew-resize hover:bg-blue-500/10"
+                          />
+
+                          {/* Middle Handles (Rectangular) */}
+                          <div 
+                            onMouseDown={(e) => startResizing(e, index, 'top')}
+                            className="absolute top-0 left-1/2 w-3 h-1.5 border border-white pointer-events-auto cursor-ns-resize -translate-x-1/2 -translate-y-1/2 rounded-[1px]" 
+                            style={{ backgroundColor: SELECTION_BLUE }}
+                          />
+                          <div 
+                            onMouseDown={(e) => startResizing(e, index, 'bottom')}
+                            className="absolute bottom-0 left-1/2 w-3 h-1.5 border border-white pointer-events-auto cursor-ns-resize -translate-x-1/2 translate-y-1/2 rounded-[1px]" 
+                            style={{ backgroundColor: SELECTION_BLUE }}
+                          />
+                          <div 
+                            onMouseDown={(e) => startResizing(e, index, 'left')}
+                            className="absolute left-0 top-1/2 w-1.5 h-3 border border-white pointer-events-auto cursor-ew-resize -translate-x-1/2 -translate-y-1/2 rounded-[1px]" 
+                            style={{ backgroundColor: SELECTION_BLUE }}
+                          />
+                          <div 
+                            onMouseDown={(e) => startResizing(e, index, 'right')}
+                            className="absolute right-0 top-1/2 w-1.5 h-3 border border-white pointer-events-auto cursor-ew-resize translate-x-1/2 -translate-y-1/2 rounded-[1px]" 
+                            style={{ backgroundColor: SELECTION_BLUE }}
+                          />
+                       </div>
+                     )}
                   </div>
                 ))}
               </div>

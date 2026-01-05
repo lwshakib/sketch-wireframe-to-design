@@ -34,45 +34,110 @@ import { toast } from "sonner";
 
 const PROMPTS = {
   app: [
-    "Quiz page in a language learning app with a progress bar at the top and four options.",
-    "Fitness tracker dashboard with heart rate graph and daily step goal ring.",
-    "Food delivery app home screen with categorized restaurant listings and deals.",
+    "Food delivery mobile app UI home screen with categorized restaurant listings and deals.",
+    "Fitness tracker mobile app UI with heart rate graph and daily step goal ring.",
+    "Language learning mobile app UI quiz page with a progress bar and multiple choice options.",
+    "E-commerce mobile app UI product detail page with image gallery and 'Add to Cart' button.",
+    "Social media mobile app UI profile page with post grid, follower count, and bio.",
+    "Banking mobile app UI dashboard showing account balance, recent transactions, and quick pay.",
+    "Travel booking mobile app UI search results with flight filters and price comparisons.",
+    "Music streaming mobile app UI player screen with album art, playback controls, and playlist.",
+    "Meditation mobile app UI home screen with calming background, daily session, and mood tracker.",
+    "Crypto wallet mobile app UI with asset list, balance chart, and send/receive buttons.",
+    "Weather mobile app UI forecast screen with hourly temperature, wind speed, and humidity.",
+    "Recipe mobile app UI discovery page with high-quality food photography and difficulty filters.",
+    "Task management mobile app UI board view with draggable cards and priority labels.",
+    "Real estate mobile app UI map view showing property pins and price cards.",
+    "Appointment booking mobile app UI calendar for a hair salon or doctor's office.",
+    "Expense tracker mobile app UI with pie chart breakdown and budget progress.",
+    "Dating mobile app UI discovery screen with swipe cards and user interest tags.",
+    "Smart home control mobile app UI with toggle switches for lights and temperature.",
+    "Podcast player mobile app UI screen with episode description and speed controls.",
+    "Online course mobile app UI dashboard with lesson progress and certificate preview.",
+    "Car rental mobile app UI checkout screen with insurance options and price breakdown.",
+    "Event ticket booking mobile app UI with QR code and seat selection.",
+    "Job search mobile app UI listing page with salary filters and easy apply button.",
+    "Pet adoption mobile app UI profile for a dog including health stats and personality traits.",
+    "Personal journal mobile app UI writing screen with mood icons and photo attachments.",
+    "Coffee shop loyalty mobile app UI with point balance and reward tiers.",
+    "Parking finder mobile app UI map showing available spots and hourly rates.",
+    "Inventory management mobile app UI scanner for warehouse workers.",
+    "Gamified habit tracker mobile app UI with streak icons and level-up rewards.",
+    "Public transport mobile app UI route planner with bus/train arrival times.",
   ],
   web: [
-    "Mobile-responsive ecommerce home page for a bird watching gear store.",
+    "Mobile-responsive ecommerce home page for a luxury furniture store.",
     "SaaS landing page with feature grid, pricing cards, and customer testimonials.",
-    "Modern portfolio website for a 3D artist showcasing a gallery of work.",
+    "Modern portfolio website for a freelance developer showcasing project case studies.",
+    "Corporate marketing website for a green energy startup with interactive infographics.",
+    "Online magazine layout with featured articles, categories, and newsletter signup.",
+    "Admin dashboard for an analytics platform with sidebar and data tables.",
+    "Non-profit organization homepage with donation goals and upcoming events.",
+    "Real estate landing page with large hero image and property search bar.",
+    "B2B software pricing page with multi-tier plans and FAQ section.",
+    "Luxury travel agency website with curated destination galleries.",
+    "Tech blog home page with latest posts, trending topics, and social links.",
+    "Online learning platform landing page with course categories and instructor bios.",
+    "Health and wellness blog with wellness tips and a shop for organic products.",
+    "Law firm website with practice area icons and attorney profiles.",
+    "Creative agency showcase with full-screen video background and project grid.",
+    "Restaurant website with menu sections and reservation button.",
+    "Software documentation site with sidebar navigation and search.",
+    "Community forum landing page with category list and active thread previews.",
+    "Web app login and signup page with social auth and background illustration.",
+    "Cloud storage dashboard with file grid, folder navigation, and upload status.",
+    "Digital marketing agency landing page with service icons and client logos.",
+    "Event conference website with speaker lineup, schedule, and ticket links.",
+    "Photography portfolio with masonry grid and lightbox preview.",
+    "E-learning student dashboard with course cards and upcoming assignments.",
+    "Finance news portal with stock ticker and top headlines.",
+    "Portfolio for a UI/UX designer with process steps and before/after shots.",
+    "Modern barber shop website with service price list and booking link.",
+    "Gaming news site with game reviews, trailers, and platform filters.",
+    "Architect firm portfolio with high-res project photos and blueprints.",
+    "Yoga studio website with class schedule and instructor introductions.",
   ]
 };
 
-const SECTIONS = [
-  {
-    title: "Today",
-    items: [
-      { id: "1", title: "Daily Check-In", type: "App", color: "bg-emerald-500/20 text-emerald-500" },
-    ],
-  },
-  {
-    title: "Last year",
-    items: [
-      { id: "2", title: "Edge Dashboard", type: "Desktop", color: "bg-blue-500/20 text-blue-500" },
-      { id: "3", title: "Edge Deployment Platform Dashboard", type: "Desktop", color: "bg-blue-500/10 text-blue-400" },
-      { id: "4", title: "Personal Portfolio for a Full-Stack Developer", type: "Desktop", color: "bg-orange-500/20 text-orange-500" },
-    ],
-  },
-  {
-    title: "Examples",
-    items: [
-      { id: "5", title: "Indoor Plant Care Dashboard", type: "Desktop", color: "bg-zinc-700/50 text-zinc-500" },
-      { id: "6", title: "Alps skiing guide", type: "App", color: "bg-zinc-700/50 text-zinc-500" },
-      { id: "7", title: "Ceramic & Pottery Marketplace", type: "App", color: "bg-zinc-700/50 text-zinc-500" },
-      { id: "8", title: "Board game club planner", type: "App", color: "bg-zinc-700/50 text-zinc-500" },
-      { id: "9", title: "Homemade Pizza Cooking Elite Class", type: "Desktop", color: "bg-zinc-700/50 text-zinc-500" },
-      { id: "10", title: "Personal photo library", type: "Desktop", color: "bg-zinc-700/50 text-zinc-500" },
-      { id: "11", title: "Employee Feedback Dashboard", type: "Desktop", color: "bg-zinc-700/50 text-zinc-500" },
-    ],
-  },
-];
+// Helper to group projects by date
+const groupProjectsByDate = (projects: any[]) => {
+  const sections: { title: string; items: any[] }[] = [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  const todayItems = projects.filter(p => new Date(p.createdAt) >= today);
+  const yesterdayItems = projects.filter(p => {
+    const d = new Date(p.createdAt);
+    return d >= yesterday && d < today;
+  });
+  const olderItems = projects.filter(p => new Date(p.createdAt) < yesterday);
+
+  if (todayItems.length > 0) sections.push({ title: "Today", items: todayItems });
+  if (yesterdayItems.length > 0) sections.push({ title: "Yesterday", items: yesterdayItems });
+  if (olderItems.length > 0) sections.push({ title: "Previous", items: olderItems });
+
+  return sections;
+};
+
+const ProjectSkeleton = () => (
+  <div className="space-y-4">
+    <div className="h-3 w-20 bg-secondary animate-pulse rounded ml-2" />
+    <div className="space-y-2">
+      {[1, 2, 3].map(i => (
+        <div key={i} className="flex items-center gap-3 p-2">
+           <div className="h-10 w-10 bg-secondary animate-pulse rounded-lg" />
+           <div className="flex-1 space-y-2">
+              <div className="h-4 w-full bg-secondary animate-pulse rounded" />
+              <div className="h-3 w-1/2 bg-secondary animate-pulse rounded" />
+           </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
 
 import { useRouter } from "next/navigation";
 
@@ -88,11 +153,62 @@ export default function Home() {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [projects, setProjects] = useState<any[]>([]);
+  const [loadingProjects, setLoadingProjects] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
   const router = useRouter();
+
+  const fetchProjects = async (isLoadMore = false) => {
+    if (isLoadMore && (isLoadingMore || !hasMore)) return;
+    
+    if (isLoadMore) setIsLoadingMore(true);
+    else setLoadingProjects(true);
+
+    try {
+      const skip = isLoadMore ? projects.length : 0;
+      const res = await fetch(`/api/projects?limit=20&skip=${skip}`);
+      if (res.ok) {
+        const data = await res.json();
+        
+        if (data.length < 20) {
+          setHasMore(false);
+        } else {
+          setHasMore(true);
+        }
+
+        if (isLoadMore) {
+          setProjects(prev => [...prev, ...data]);
+        } else {
+          setProjects(data);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch projects:", error);
+    } finally {
+      if (isLoadMore) setIsLoadingMore(false);
+      else setLoadingProjects(false);
+    }
+  };
+
+  const [shuffledPrompts, setShuffledPrompts] = useState<string[]>([]);
 
   useEffect(() => {
     setIsMounted(true);
+    fetchProjects();
   }, []);
+
+  useEffect(() => {
+    if (isMounted) {
+      const allPrompts = PROMPTS[activeTab];
+      const shuffled = [...allPrompts]
+        .sort(() => Math.random() - 0.5)
+        .slice(0, 3);
+      setShuffledPrompts(shuffled);
+    }
+  }, [activeTab, isMounted]);
 
   const onSubmit = async () => {
     if (!inputValue.trim() && attachments.length === 0) return;
@@ -193,11 +309,25 @@ export default function Home() {
     setAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
+  const filteredProjects = projects.filter(p => 
+    p.title.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+  
+  const sections = groupProjectsByDate(filteredProjects);
+
   if (!isMounted) return null;
 
   return (
     <div className="flex h-screen w-full bg-background text-foreground overflow-hidden font-sans transition-colors duration-500">
-      <Sidebar />
+      <Sidebar 
+        sections={sections} 
+        loading={loadingProjects} 
+        isLoadingMore={isLoadingMore}
+        hasMore={hasMore}
+        loadMore={() => fetchProjects(true)}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+      />
 
       <main className="flex-1 flex flex-col relative overflow-hidden bg-background">
         {/* Top Header */}
@@ -216,7 +346,15 @@ export default function Home() {
 
         {/* Mobile Page Header */}
         <div className="lg:hidden absolute top-20 right-6 z-50">
-          <MobileMenu />
+          <MobileMenu 
+            sections={sections} 
+            loading={loadingProjects}
+            isLoadingMore={isLoadingMore}
+            hasMore={hasMore}
+            loadMore={() => fetchProjects(true)}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+          />
         </div>
 
         {/* Center Workspace */}
@@ -350,7 +488,7 @@ export default function Home() {
             <div className="space-y-4">
                <h3 className="text-[11px] font-black text-muted-foreground ml-1 uppercase tracking-widest">Try these prompts</h3>
                <div className="flex flex-col gap-3">
-                  {PROMPTS[activeTab].map((prompt: string, i: number) => (
+                  {shuffledPrompts.map((prompt: string, i: number) => (
                     <button
                       key={i}
                       onClick={() => {
@@ -372,15 +510,52 @@ export default function Home() {
   );
 }
 
-function MobileMenu() {
+interface MobileMenuProps {
+  sections: any[];
+  loading: boolean;
+  isLoadingMore: boolean;
+  hasMore: boolean;
+  loadMore: () => void;
+  searchQuery: string;
+  setSearchQuery: (q: string) => void;
+}
+
+function MobileMenu({ 
+  sections, 
+  loading, 
+  isLoadingMore,
+  hasMore,
+  loadMore,
+  searchQuery, 
+  setSearchQuery 
+}: MobileMenuProps) {
   const [open, setOpen] = useState(false);
   const isMobile = useIsMobile();
+  const router = useRouter();
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!isMobile) {
       setOpen(false);
     }
   }, [isMobile]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const onScroll = () => {
+      if (!hasMore || isLoadingMore || searchQuery) return;
+      
+      const { scrollTop, scrollHeight, clientHeight } = el;
+      if (scrollTop + clientHeight >= scrollHeight - 50) {
+        loadMore();
+      }
+    };
+
+    el.addEventListener("scroll", onScroll);
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [hasMore, isLoadingMore, loadMore, searchQuery, open]);
 
   return (
     <Drawer open={open} onOpenChange={setOpen}>
@@ -405,31 +580,65 @@ function MobileMenu() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-foreground transition-colors" />
             <input
               type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search projects"
               className="w-full bg-secondary/50 border border-border rounded-lg py-2.5 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-border transition-all font-medium"
             />
           </div>
         </div>
 
-        <div className="px-4 py-8 space-y-8 overflow-y-auto">
-          {SECTIONS.map((section) => (
-             <div key={section.title} className="space-y-4">
-                <h4 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest px-2">{section.title}</h4>
-                <div className="space-y-2">
-                   {section.items.map((item) => (
-                      <button key={item.id} className="w-full flex items-center gap-4 p-3 rounded-2xl hover:bg-secondary transition-all text-left group border border-transparent hover:border-border">
-                        <div className={cn("h-12 w-12 shrink-0 rounded-xl flex items-center justify-center border border-border shadow-sm", item.color)}>
-                            <div className="w-6 h-6 rounded bg-current opacity-20" />
-                        </div>
-                        <div className="flex flex-col overflow-hidden">
-                           <span className="text-base font-bold text-foreground truncate">{item.title}</span>
-                           <span className="text-xs font-black text-muted-foreground uppercase tracking-tight">{item.type}</span>
-                        </div>
-                      </button>
-                   ))}
+        <div 
+          ref={scrollRef}
+          className="px-4 py-8 space-y-8 overflow-y-auto min-h-[300px]"
+        >
+          {loading ? (
+            <div className="space-y-8">
+               <ProjectSkeleton />
+               <ProjectSkeleton />
+            </div>
+          ) : sections.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center space-y-2">
+               <div className="h-12 w-12 rounded-full bg-secondary flex items-center justify-center">
+                  <Search className="h-6 w-6 text-muted-foreground" />
+               </div>
+               <p className="text-sm font-medium text-muted-foreground">No projects found</p>
+            </div>
+          ) : (
+            <>
+              {sections.map((section) => (
+                 <div key={section.title} className="space-y-4">
+                    <h4 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest px-2">{section.title}</h4>
+                    <div className="space-y-2">
+                       {section.items.map((item: any) => (
+                          <button 
+                            key={item.id} 
+                            onClick={() => {
+                              setOpen(false);
+                              router.push(`/project/${item.id}`);
+                            }}
+                            className="w-full flex items-center gap-4 p-3 rounded-2xl hover:bg-secondary transition-all text-left group border border-transparent hover:border-border"
+                          >
+                            <div className={cn("h-12 w-12 shrink-0 rounded-xl flex items-center justify-center border border-border shadow-sm bg-indigo-500/10 text-indigo-500")}>
+                                <Smartphone className="w-6 h-6" />
+                            </div>
+                            <div className="flex flex-col overflow-hidden">
+                               <span className="text-base font-bold text-foreground truncate">{item.title}</span>
+                               <span className="text-xs font-black text-muted-foreground uppercase tracking-tight">Project</span>
+                            </div>
+                          </button>
+                       ))}
+                    </div>
+                 </div>
+              ))}
+              
+              {isLoadingMore && (
+                <div className="flex justify-center p-4">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
-             </div>
-          ))}
+              )}
+            </>
+          )}
         </div>
       </DrawerContent>
     </Drawer>
