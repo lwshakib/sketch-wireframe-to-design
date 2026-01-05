@@ -42,3 +42,38 @@ export async function GET(
     return new NextResponse("Internal Error", { status: 500 });
   }
 }
+
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ projectId: string }> }
+) {
+  try {
+    const session = await auth.api.getSession({
+      headers: await headers()
+    });
+
+    if (!session) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
+
+    const { projectId } = await params;
+    const body = await req.json();
+    const { canvasData, title } = body;
+
+    const project = await prisma.project.update({
+      where: {
+        id: projectId,
+        userId: session.user.id,
+      },
+      data: {
+        canvasData,
+        title,
+      }
+    });
+
+    return NextResponse.json(project);
+  } catch (error) {
+    console.error("[PROJECT_PATCH]", error);
+    return new NextResponse("Internal Error", { status: 500 });
+  }
+}

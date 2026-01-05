@@ -23,7 +23,6 @@ export function extractArtifact(text: string): { content: string, type: 'web' | 
           isComplete: true 
         };
       } else {
-        // Handle streaming: return content up to current end of string
         return { 
           content: text.substring(contentStart).trim(), 
           type: tag.type,
@@ -31,6 +30,26 @@ export function extractArtifact(text: string): { content: string, type: 'web' | 
         };
       }
     }
+  }
+
+  // Fallback: If the text contains significant HTML markers but no artifact tags,
+  // we treat it as an incomplete or 'broken' artifact to prevent raw code display in chat.
+  const htmlMarkers = ['<!doctype html>', '<html', '<body', '<script', '<style'];
+  const lowerText = text.toLowerCase();
+  const hasHtml = htmlMarkers.some(marker => lowerText.includes(marker));
+  
+  if (hasHtml && text.length > 50) {
+    // Try to guess type based on content or context hints
+    let type: 'web' | 'app' | 'general' = 'web';
+    if (lowerText.includes('mobile') || lowerText.includes('phone') || lowerText.includes('app_artifact')) {
+      type = 'app';
+    }
+
+    return {
+      content: text.trim(),
+      type,
+      isComplete: false // Treat as incomplete until we see a closing tag or it's finished
+    };
   }
 
   return null;

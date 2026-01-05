@@ -13,6 +13,5 @@ export const GeminiModel = () => {
   const google = createGoogleGenerativeAI({
     apiKey: getSingleAPIKey(),
   });
-  // Using gemini-2.0-flash as it's common and provides better performance than flash-lite for designs
   return google("gemini-2.5-flash-lite"); 
 };
