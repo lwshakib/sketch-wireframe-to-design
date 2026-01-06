@@ -108,12 +108,12 @@ const groupProjectsByDate = (projects: any[]) => {
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
 
-  const todayItems = projects.filter(p => new Date(p.createdAt) >= today);
+  const todayItems = projects.filter(p => new Date(p.updatedAt) >= today);
   const yesterdayItems = projects.filter(p => {
-    const d = new Date(p.createdAt);
+    const d = new Date(p.updatedAt);
     return d >= yesterday && d < today;
   });
-  const olderItems = projects.filter(p => new Date(p.createdAt) < yesterday);
+  const olderItems = projects.filter(p => new Date(p.updatedAt) < yesterday);
 
   if (todayItems.length > 0) sections.push({ title: "Today", items: todayItems });
   if (yesterdayItems.length > 0) sections.push({ title: "Yesterday", items: yesterdayItems });
@@ -127,12 +127,9 @@ const ProjectSkeleton = () => (
     <div className="h-3 w-20 bg-secondary animate-pulse rounded ml-2" />
     <div className="space-y-2">
       {[1, 2, 3].map(i => (
-        <div key={i} className="flex items-center gap-3 p-2">
-           <div className="h-10 w-10 bg-secondary animate-pulse rounded-lg" />
-           <div className="flex-1 space-y-2">
-              <div className="h-4 w-full bg-secondary animate-pulse rounded" />
-              <div className="h-3 w-1/2 bg-secondary animate-pulse rounded" />
-           </div>
+        <div key={i} className="flex flex-col gap-1.5 p-3">
+           <div className="h-4 w-full bg-secondary animate-pulse rounded" />
+           <div className="h-3 w-1/3 bg-secondary animate-pulse rounded" />
         </div>
       ))}
     </div>
@@ -617,15 +614,10 @@ function MobileMenu({
                               setOpen(false);
                               router.push(`/project/${item.id}`);
                             }}
-                            className="w-full flex items-center gap-4 p-3 rounded-2xl hover:bg-secondary transition-all text-left group border border-transparent hover:border-border"
+                            className="w-full flex flex-col gap-1 p-4 rounded-2xl hover:bg-secondary transition-all text-left group border border-transparent hover:border-border"
                           >
-                            <div className={cn("h-12 w-12 shrink-0 rounded-xl flex items-center justify-center border border-border shadow-sm bg-indigo-500/10 text-indigo-500")}>
-                                <Smartphone className="w-6 h-6" />
-                            </div>
-                            <div className="flex flex-col overflow-hidden">
-                               <span className="text-base font-bold text-foreground truncate">{item.title}</span>
-                               <span className="text-xs font-black text-muted-foreground uppercase tracking-tight">Project</span>
-                            </div>
+                            <span className="text-base font-bold text-foreground truncate">{item.title}</span>
+                            <span className="text-xs font-medium text-muted-foreground">{getRelativeTime(item.updatedAt)}</span>
                           </button>
                        ))}
                     </div>
@@ -643,4 +635,30 @@ function MobileMenu({
       </DrawerContent>
     </Drawer>
   );
+}
+
+// Helper function to get relative time
+function getRelativeTime(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffSecs = Math.floor(diffMs / 1000);
+  const diffMins = Math.floor(diffSecs / 60);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffSecs < 60) return "just now";
+  if (diffMins < 60) return `${diffMins} ${diffMins === 1 ? "minute" : "minutes"} ago`;
+  if (diffHours < 24) return `${diffHours} ${diffHours === 1 ? "hour" : "hours"} ago`;
+  if (diffDays < 7) return `${diffDays} ${diffDays === 1 ? "day" : "days"} ago`;
+  if (diffDays < 30) {
+    const weeks = Math.floor(diffDays / 7);
+    return `${weeks} ${weeks === 1 ? "week" : "weeks"} ago`;
+  }
+  if (diffDays < 365) {
+    const months = Math.floor(diffDays / 30);
+    return `${months} ${months === 1 ? "month" : "months"} ago`;
+  }
+  const years = Math.floor(diffDays / 365);
+  return `${years} ${years === 1 ? "year" : "years"} ago`;
 }
