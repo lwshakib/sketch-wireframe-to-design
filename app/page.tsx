@@ -276,7 +276,7 @@ export default function Home() {
         formData.append("api_key", sigData.apiKey);
         formData.append("timestamp", sigData.timestamp.toString());
         formData.append("signature", sigData.signature);
-        formData.append("folder", sigData.folder || "sketch-wireframe-to-design");
+        formData.append("folder", sigData.folder || "sketch-design-with-ai");
 
         const uploadRes = await fetch(uploadApi, {
           method: "POST",

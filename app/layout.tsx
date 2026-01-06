@@ -9,7 +9,8 @@ export const metadata: Metadata = {
     default: "Sketch - AI-Powered Design Tool",
     template: "%s | Sketch",
   },
-  description: "Design with AI - Transform your sketches into stunning, production-ready designs instantly. Create beautiful UI designs with Google Gemini AI, export to code, and customize themes with ease.",
+  description:
+    "Design with AI - Transform your sketches into stunning, production-ready designs instantly. Create beautiful UI designs with Google Gemini AI, export to code, and customize themes with ease.",
   keywords: [
     "sketch design with AI",
     "AI design tool",
@@ -29,15 +30,17 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://sketch-wireframe-to-design.vercel.app",
+    url: "https://sketch-design-with-ai.vercel.app",
     title: "Sketch - Design with AI | AI-Powered Design Tool",
-    description: "Design with AI - Transform your sketches into stunning, production-ready designs instantly. Create beautiful UI designs with Google Gemini AI, export to code, and customize themes with ease.",
+    description:
+      "Design with AI - Transform your sketches into stunning, production-ready designs instantly. Create beautiful UI designs with Google Gemini AI, export to code, and customize themes with ease.",
     siteName: "Sketch - Design with AI",
   },
   twitter: {
     card: "summary_large_image",
     title: "Sketch - Design with AI | AI-Powered Design Tool",
-    description: "Design with AI - Transform your sketches into stunning, production-ready designs instantly using Google Gemini AI.",
+    description:
+      "Design with AI - Transform your sketches into stunning, production-ready designs instantly using Google Gemini AI.",
     creator: "@lwshakib",
   },
   robots: {
@@ -53,13 +56,19 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/favicon_io/favicon-16x16.png", sizes: "16x16", type: "image/png" },
-      { url: "/favicon_io/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      {
+        url: "/favicon_io/favicon-16x16.png",
+        sizes: "16x16",
+        type: "image/png",
+      },
+      {
+        url: "/favicon_io/favicon-32x32.png",
+        sizes: "32x32",
+        type: "image/png",
+      },
       { url: "/favicon_io/favicon.ico", sizes: "any" },
     ],
-    apple: [
-      { url: "/favicon_io/apple-touch-icon.png" },
-    ],
+    apple: [{ url: "/favicon_io/apple-touch-icon.png" }],
     other: [
       {
         rel: "manifest",

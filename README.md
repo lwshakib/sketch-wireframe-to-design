@@ -98,8 +98,8 @@ Before you begin, ensure you have the following installed:
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/lwshakib/sketch-wireframe-to-design.git
-cd sketch-wireframe-to-design
+git clone https://github.com/lwshakib/sketch-design-with-ai.git
+cd sketch-design-with-ai
 ```
 
 ### 2. Install Dependencies
@@ -173,7 +173,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser to see the a
 ## 📁 Project Structure
 
 ```
-sketch-wireframe-to-design/
+sketch-design-with-ai/
 ├── app/                      # Next.js App Router
 │   ├── (auth)/              # Authentication pages
 │   ├── api/                 # API routes
@@ -254,7 +254,7 @@ See `prisma/schema.prisma` for the complete schema.
 3. Add environment variables in Vercel dashboard
 4. Deploy!
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/lwshakib/sketch-wireframe-to-design)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/lwshakib/sketch-design-with-ai)
 
 ### Database Hosting
 
@@ -306,14 +306,14 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [Vercel](https://vercel.com/) for Next.js and hosting
 - [Radix UI](https://www.radix-ui.com/) for accessible components
 - [shadcn/ui](https://ui.shadcn.com/) for beautiful UI components
-- All our amazing [contributors](https://github.com/lwshakib/sketch-wireframe-to-design/graphs/contributors)
+- All our amazing [contributors](https://github.com/lwshakib/sketch-design-with-ai/graphs/contributors)
 
 ## 📧 Contact & Support
 
 - **Author**: Shakib Khan ([@lwshakib](https://github.com/lwshakib))
 - **Email**: lwshakib@gmail.com
-- **Issues**: [GitHub Issues](https://github.com/lwshakib/sketch-wireframe-to-design/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/lwshakib/sketch-wireframe-to-design/discussions)
+- **Issues**: [GitHub Issues](https://github.com/lwshakib/sketch-design-with-ai/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/lwshakib/sketch-design-with-ai/discussions)
 
 ## 🗺️ Roadmap
 
@@ -334,6 +334,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ⭐ Star this repo if you find it helpful!
 
-[Report Bug](https://github.com/lwshakib/sketch-wireframe-to-design/issues) · [Request Feature](https://github.com/lwshakib/sketch-wireframe-to-design/issues) · [Documentation](https://github.com/lwshakib/sketch-wireframe-to-design/wiki)
+[Report Bug](https://github.com/lwshakib/sketch-design-with-ai/issues) · [Request Feature](https://github.com/lwshakib/sketch-design-with-ai/issues) · [Documentation](https://github.com/lwshakib/sketch-design-with-ai/wiki)
 
 </div>

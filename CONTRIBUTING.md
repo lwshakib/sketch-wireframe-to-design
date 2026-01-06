@@ -42,19 +42,19 @@ Before you begin, make sure you have:
 1. **Fork the repository** on GitHub by clicking the "Fork" button
 2. **Clone your fork** locally:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/sketch-wireframe-to-design.git
-   cd sketch-wireframe-to-design
+   git clone https://github.com/YOUR_USERNAME/sketch-design-with-ai.git
+   cd sketch-design-with-ai
    ```
 3. **Add upstream remote** to keep your fork in sync:
    ```bash
-   git remote add upstream https://github.com/lwshakib/sketch-wireframe-to-design.git
+   git remote add upstream https://github.com/lwshakib/sketch-design-with-ai.git
    ```
 
 ## 🤝 How Can I Contribute?
 
 ### Reporting Bugs
 
-Bugs are tracked as [GitHub issues](https://github.com/lwshakib/sketch-wireframe-to-design/issues). Before creating a bug report, please check existing issues to avoid duplicates.
+Bugs are tracked as [GitHub issues](https://github.com/lwshakib/sketch-design-with-ai/issues). Before creating a bug report, please check existing issues to avoid duplicates.
 
 #### How to Submit a Good Bug Report
 
@@ -103,7 +103,7 @@ Add any other context about the problem here.
 
 ### Suggesting Enhancements
 
-Enhancement suggestions are also tracked as [GitHub issues](https://github.com/lwshakib/sketch-wireframe-to-design/issues).
+Enhancement suggestions are also tracked as [GitHub issues](https://github.com/lwshakib/sketch-design-with-ai/issues).
 
 #### How to Submit a Good Enhancement Suggestion
 

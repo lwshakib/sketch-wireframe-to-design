@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "sketch-wireframe-to-design",
+      "name": "sketch-design-with-ai",
       "dependencies": {
         "@ai-sdk/google": "^3.0.2",
         "@ai-sdk/react": "^3.0.6",
