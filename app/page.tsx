@@ -359,7 +359,7 @@ export default function Home() {
 
         {/* Center Workspace */}
         <div className="flex-1 flex flex-col items-center justify-center px-6 overflow-y-auto pb-20">
-          <div className="w-full max-w-2xl space-y-12 mb-12">
+          <div className="w-full max-w-2xl space-y-12 mb-12 pt-10">
             
             {/* Main Title Row */}
             <div className="flex items-center justify-center gap-4 flex-wrap text-center">

@@ -77,3 +77,32 @@ export async function PATCH(
     return new NextResponse("Internal Error", { status: 500 });
   }
 }
+
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ projectId: string }> }
+) {
+  try {
+    const session = await auth.api.getSession({
+      headers: await headers()
+    });
+
+    if (!session) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
+
+    const { projectId } = await params;
+
+    const project = await prisma.project.delete({
+      where: {
+        id: projectId,
+        userId: session.user.id,
+      },
+    });
+
+    return NextResponse.json(project);
+  } catch (error) {
+    console.error("[PROJECT_DELETE]", error);
+    return new NextResponse("Internal Error", { status: 500 });
+  }
+}

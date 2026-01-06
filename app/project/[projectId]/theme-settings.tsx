@@ -215,7 +215,7 @@ export function ThemeSettings({ activeThemeId, onApplyTheme, appliedTheme }: Pro
             {!showInput ? (
                 <>
                     <p className="text-[11px] text-zinc-300 leading-relaxed italic">
-                        "Describe a mood or brand identity and Stitch will generate a custom color palette and typography system for you."
+                        "Describe a mood or brand identity and Sketch will generate a custom color palette and typography system for you."
                     </p>
                     <button 
                         onClick={() => setShowInput(true)}

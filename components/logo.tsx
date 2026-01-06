@@ -39,14 +39,14 @@ export interface LogoProps {
 
 export const Logo = ({
   className = "",
-  iconSize = 24,
+  iconSize = 34,
   textSize = "1.5rem",
   showText = true,
   showBadge = true,
 }: LogoProps): React.ReactElement => {
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      <LogoIcon size={iconSize} className="text-white" />
+      <LogoIcon size={iconSize} className="text-foreground" />
       {showText && (
         <span
           style={{
@@ -54,13 +54,13 @@ export const Logo = ({
             fontWeight: 600,
             letterSpacing: "-0.01em",
           }}
-          className="text-white"
+          className="text-foreground"
         >
           Sketch
         </span>
       )}
       {showBadge && (
-        <div className="bg-zinc-800 text-[10px] px-2 py-0.5 rounded-full text-zinc-400 font-bold border border-zinc-700">
+        <div className="bg-secondary text-[10px] px-2 py-0.5 rounded-full text-secondary-foreground font-bold border border-border">
           BETA
         </div>
       )}

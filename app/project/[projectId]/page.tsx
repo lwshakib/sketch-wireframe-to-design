@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import {
   Plus,
+  ArrowLeft,
   ArrowRight,
   ChevronDown,
   Sparkles,
@@ -52,7 +53,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 import { UserMenu } from "@/components/user-menu";
-import { Logo } from "@/components/logo";
+import { Logo, LogoIcon } from "@/components/logo";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { DefaultChatTransport } from "ai";
@@ -90,6 +91,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { authClient } from "@/lib/auth-client";
 
 interface Project {
   id: string;
@@ -296,6 +298,8 @@ export default function ProjectPage() {
   const resizingStartSize = useRef({ width: 0, height: 0 });
   const resizingStartPos = useRef({ x: 0, y: 0 });
   const resizingStartFramePos = useRef({ x: 0, y: 0 });
+  const [isEditTitleDialogOpen, setIsEditTitleDialogOpen] = useState(false);
+  const [editingTitle, setEditingTitle] = useState("");
 
   // Refs to keep track of state in wheel event listeners without re-attaching
   const zoomRef = useRef(zoom);
@@ -728,29 +732,69 @@ export default function ProjectPage() {
   }, [isEditMode, hoveredEl, selectedEl, commitEdits]);
 
   // Save canvas data on change
-  const handleSave = useCallback(async () => {
-    if (!project || loading) return;
-    
-    const savePromise = fetch(`/api/projects/${projectId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        canvasData: {
-          zoom,
-          canvasOffset,
-          framePos,
-          artifacts,
-          appliedTheme
-        },
-      }),
-    });
+  const handleSave = async () => {
+    if (!project) return;
+    try {
+      await fetch(`/api/projects/${projectId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages,
+          canvasData: {
+            artifacts,
+            framePos,
+            zoom,
+            canvasOffset,
+            dynamicFrameHeights,
+            artifactPreviewModes
+          }
+        })
+      });
+      toast.success("Project saved successfully!");
+    } catch (error) {
+      console.error('Save error:', error);
+      toast.error("Failed to save project");
+    }
+  };
 
-    toast.promise(savePromise, {
-      loading: 'Saving project...',
-      success: 'Project saved successfully',
-      error: 'Failed to save project'
-    });
-  }, [project, loading, projectId, zoom, canvasOffset, framePos, artifacts, appliedTheme]);
+  const updateProjectTitle = async (newTitle: string) => {
+    if (!project || !newTitle.trim()) return;
+    
+    try {
+      const response = await fetch(`/api/projects/${projectId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newTitle.trim() })
+      });
+
+      if (!response.ok) throw new Error('Failed to update title');
+
+      setProject({ ...project, title: newTitle.trim() });
+      toast.success("Project title updated!");
+      setIsEditTitleDialogOpen(false);
+    } catch (error) {
+      console.error('Update title error:', error);
+      toast.error("Failed to update project title");
+    }
+  };
+
+  const deleteProject = async () => {
+    if (!confirm("Are you sure you want to delete this project? This action cannot be undone.")) return;
+    
+    try {
+      const response = await fetch(`/api/projects/${projectId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) throw new Error('Failed to delete project');
+
+      toast.success("Project deleted");
+      router.push("/");
+    } catch (error) {
+      console.error('Delete project error:', error);
+      toast.error("Failed to delete project");
+    }
+  };
 
   // Shortcut for saving (Ctrl + S)
   useEffect(() => {
@@ -1096,7 +1140,7 @@ export default function ProjectPage() {
 
   const handleArtifactAction = (action: 'more' | 'regenerate' | 'variations', artifact: Artifact) => {
     if (status !== 'ready') {
-      toast.warning("Stitch is busy with another task. Please wait a moment.");
+      toast.warning("Sketch is busy with another task. Please wait a moment.");
       return;
     }
 
@@ -1120,7 +1164,7 @@ export default function ProjectPage() {
 
   const handleRegenerateSubmit = () => {
     if (status !== 'ready') {
-      toast.warning("Stitch is busy. Please wait for the current task to finish.");
+      toast.warning("Sketch is busy. Please wait for the current task to finish.");
       return;
     }
     
@@ -1218,6 +1262,8 @@ export default function ProjectPage() {
     setIsCodeViewerOpen(true);
   };
 
+  const session = authClient.useSession();
+
   if (loading) {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-background">
@@ -1235,7 +1281,7 @@ export default function ProjectPage() {
     <div className="flex h-screen w-full bg-background text-foreground overflow-hidden font-sans">
       
       {/* Left Sidebar - Chat, Properties, or Theme */}
-      <aside className="w-[380px] flex flex-col border-r bg-sidebar z-20">
+      <aside className="w-[380px] flex flex-col border-r bg-card z-20 transition-all duration-300">
         {leftSidebarMode === 'properties' ? (
           <ElementSettings 
             selectedEl={selectedEl} 
@@ -1246,116 +1292,173 @@ export default function ProjectPage() {
           <ThemeSettings 
             activeThemeId={activeThemeId}
             onApplyTheme={applyTheme}
+            appliedTheme={appliedTheme}
           />
         ) : (
           <>
-            <header className="flex items-center justify-between px-4 py-2 h-14 border-b bg-sidebar">
+            <header className="flex items-center justify-between px-4 py-2 h-14 border-b bg-sidebar transition-all">
                <div className="flex items-center gap-2">
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-white">
-                    <Menu className="h-5 w-5" />
-                  </Button>
-                  <span className="font-semibold text-[15px] text-foreground tracking-tight">{project.title}</span>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-white ml-2">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      >
+                        <Menu className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-56">
+                      <DropdownMenuItem onClick={() => router.push('/')}>
+                        <ArrowLeft className="mr-2 h-4 w-4" />
+                        Go to all projects
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={deleteProject} className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete Project
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <span className="font-semibold text-[15px] text-foreground tracking-tight">
+                    {project.title}
+                  </span>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-8 w-8 text-primary"
+                    onClick={() => {
+                      setEditingTitle(project.title);
+                      setIsEditTitleDialogOpen(true);
+                    }}
+                  >
                     <Pencil className="h-3.5 w-3.5" />
                   </Button>
                </div>
-               <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-white">
-                  <Columns className="h-4 w-4" />
-               </Button>
             </header>
 
             <div className="flex-1 relative overflow-hidden bg-sidebar">
               <Conversation className="relative h-full">
-                <ConversationContent className="p-4 gap-8 scrollbar-hide">
-                  {messages.length === 0 ? (
-                    <ConversationEmptyState
-                      title="Initialize Workspace"
-                      description="Describe your vision to generate the first high-fidelity prototype."
-                      icon={<MessageSquareIcon className="size-6 text-primary" />}
-                    />
-                  ) : (
-                    messages.map((message) => (
-                      <div key={message.id} className="flex flex-col gap-4">
-                        <div className="flex items-start gap-3">
-                           {message.role === 'user' ? (
-                             <div className="h-8 w-8 rounded-full bg-zinc-800 flex items-center justify-center">
-                                <User className="h-4 w-4 text-zinc-400" />
-                             </div>
-                           ) : (
-                             <div className="h-8 w-8 rounded-full bg-indigo-600/20 flex items-center justify-center border border-indigo-500/20">
-                                <Logo iconSize={14} showText={false} showBadge={false} />
-                             </div>
-                           )}
-                           <div className="flex flex-col">
-                              <div className="flex items-center gap-2">
-                                <span className="text-[13px] font-bold text-zinc-100 uppercase tracking-wide">
-                                   {message.role === 'user' ? 'Professor' : 'Stitch'}
-                                </span>
-                                {message.role === 'assistant' && (
-                                  <div className="flex items-center gap-1.5 bg-muted px-2 py-0.5 rounded-full border shadow-sm">
-                                    <span className="text-[10px] font-medium text-muted-foreground">Thinking with 3 Pro</span>
-                                  </div>
-                                )}
-                              </div>
-                              
-                              <div className="mt-2 pl-0">
-                                <MessageContent className="p-0 bg-transparent text-foreground leading-relaxed text-[14px]">
-                                  {message.parts?.map((part: any, i: number) => {
-                                    if (part.type === 'text') {
-                                      const textContent = typeof part.text === 'string' ? part.text : part.text?.text;
-                                      if (!textContent) return null;
-                                      return (
-                                        <div key={i} className="whitespace-pre-wrap">
-                                           {message.role === 'assistant' ? (
-                                             (() => {
-                                               const isRawHtml = textContent.toLowerCase().includes('<!doctype') || textContent.toLowerCase().includes('<html');
-                                               if (isRawHtml && extractArtifacts(textContent).length === 0) {
-                                                  return (
-                                                    <div className="flex flex-col gap-2 p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
-                                                      <div className="flex items-center gap-2 text-red-400 font-bold text-xs uppercase tracking-widest">
-                                                        <X className="size-3" />
-                                                        Engine Analysis
-                                                      </div>
-                                                      <p className="text-red-200/80 text-sm">Engine has been error occurred. The generated output was malformed. Please try a different prompt.</p>
-                                                    </div>
-                                                  );
-                                               }
-                                               return <MessageResponse>{stripArtifact(textContent)}</MessageResponse>;
-                                             })()
-                                           ) : (
-                                             textContent
-                                           )}
-                                        </div>
-                                      );
-                                    }
-                                    if (part.type === 'file') {
-                                      const fileUrl = typeof part.file === 'string' ? part.file : part.file?.url;
-                                      if (!fileUrl) return null;
-                                      return (
-                                        <div key={i} className="mt-3 rounded-xl overflow-hidden border border-zinc-800 shadow-xl max-w-[200px]">
-                                           <img src={fileUrl} alt="Design Reference" className="w-full h-auto object-cover" />
-                                        </div>
-                                      );
-                                    }
-                                    return null;
-                                  })}
-                                  
-                                  {!message.parts && (
-                                    <div className="whitespace-pre-wrap">
-                                       {message.role === 'assistant' ? (
-                                         <MessageResponse>{stripArtifact((message as any).content)}</MessageResponse>
-                                       ) : (
-                                         (message as any).content
-                                       )}
-                                    </div>
-                                  )}
-                                </MessageContent>
-                              </div>
+                <ConversationContent className="p-0 scrollbar-hide">
+                  <div className="flex flex-col min-h-full pb-8">
+                    {messages.length === 0 ? (
+                      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center min-h-[400px]">
+                        <div className="relative mb-6">
+                           <div className="absolute inset-0 bg-primary/20 blur-2xl rounded-full animate-pulse" />
+                           <div className="relative h-16 w-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+                              <Sparkles className="size-8 text-primary animate-pulse" />
                            </div>
                         </div>
+                        <h3 className="text-xl font-black text-foreground tracking-tight mb-2 uppercase">Initialize Workspace</h3>
+                        <p className="text-sm text-muted-foreground leading-relaxed max-w-[240px]">
+                          Describe your vision to generate the first high-fidelity prototype.
+                        </p>
                       </div>
-                    ))
-                  )}
+                    ) : (
+                      <div className="">
+                        {messages.map((message) => (
+                          <div 
+                            key={message.id} 
+                            className={cn(
+                              "group transition-colors duration-300",
+                            )}
+                          >
+                            <div className="px-5 py-5 flex gap-3">
+                              {/* Avatar */}
+                              {message.role === 'user' ? (
+                                session.data?.user?.image ? (
+                                  <img 
+                                    src={session.data.user.image} 
+                                    alt={session.data.user.name || 'User'}
+                                    className="h-8 w-8 rounded-lg object-cover flex-shrink-0"
+                                  />
+                                ) : (
+                                  <div className="h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0">
+                                    <User className="h-4 w-4 text-zinc-400" />
+                                  </div>
+                                )
+                              ) : (
+                                <div className="h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0">
+                                  <LogoIcon className="text-primary"/>
+                                </div>
+                              )}
+                              
+                              {/* Message Content */}
+                              <div className="flex-1 min-w-0">
+                                {/* Name inline with message */}
+                                <div className="flex flex-col gap-1">
+                                  <span className="text-sm font-semibold text-foreground">
+                                    {message.role === 'user' ? (session.data?.user?.name || 'User') : 'Sketch'}
+                                  </span>
+                                  
+                                  <MessageContent className="p-0 bg-transparent text-foreground leading-relaxed text-[15px]">
+                                    {message.parts?.map((part: any, i: number) => {
+                                      if (part.type === 'text') {
+                                        const textContent = typeof part.text === 'string' ? part.text : part.text?.text;
+                                        if (!textContent) return null;
+                                        return (
+                                          <div key={i} className="whitespace-pre-wrap">
+                                             {message.role === 'assistant' ? (
+                                               (() => {
+                                                 const isRawHtml = textContent.toLowerCase().includes('<!doctype') || textContent.toLowerCase().includes('<html');
+                                                 if (isRawHtml && extractArtifacts(textContent).length === 0) {
+                                                    return (
+                                                      <div className="flex flex-col gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-xl mt-2">
+                                                        <div className="flex items-center gap-2 text-destructive font-bold text-[10px] uppercase tracking-wide">
+                                                          <X className="size-3" />
+                                                          Error
+                                                        </div>
+                                                        <p className="text-destructive/80 text-sm leading-relaxed">Engine error occurred. Please try a different prompt.</p>
+                                                      </div>
+                                                    );
+                                                 }
+                                                 return (
+                                                   <div className="text-foreground/90 leading-relaxed text-[15px]">
+                                                     <MessageResponse>{stripArtifact(textContent)}</MessageResponse>
+                                                   </div>
+                                                 );
+                                               })()
+                                             ) : (
+                                               <div className="text-foreground/90 leading-relaxed text-[15px]">
+                                                 {textContent}
+                                               </div>
+                                              )}
+                                          </div>
+                                        );
+                                      }
+                                      if (part.type === 'file') {
+                                        const fileUrl = typeof part.file === 'string' ? part.file : part.file?.url;
+                                        if (!fileUrl) return null;
+                                        return (
+                                          <div key={i} className="mt-3 rounded-xl overflow-hidden border border-border/50 max-w-[280px]">
+                                             <img src={fileUrl} alt="Attachment" className="w-full h-auto object-cover" />
+                                          </div>
+                                        );
+                                      }
+                                      return null;
+                                    })}
+                                    
+                                    {!message.parts && (
+                                      <div className="whitespace-pre-wrap">
+                                         {message.role === 'assistant' ? (
+                                           <div className="text-foreground/90 leading-relaxed text-[15px]">
+                                              <MessageResponse>{stripArtifact((message as any).content)}</MessageResponse>
+                                           </div>
+                                         ) : (
+                                           <div className="text-foreground/90 leading-relaxed text-[15px]">
+                                             {(message as any).content}
+                                           </div>
+                                         )}
+                                      </div>
+                                    )}
+                                  </MessageContent>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </ConversationContent>
               </Conversation>
             </div>
@@ -1413,9 +1516,9 @@ export default function ProjectPage() {
                     </div>
                   </div>
                </div>
-               <p className="text-[10px] text-center mt-3 text-zinc-600 font-medium">
-                  Stitch can make mistakes. Please check its work.
-               </p>
+                <p className="text-[10px] text-center mt-3 text-zinc-600 font-medium tracking-wide uppercase">
+                  Sketch can make mistakes. Please check its work.
+                </p>
             </div>
           </>
         )}
@@ -1460,9 +1563,9 @@ export default function ProjectPage() {
             <div className="flex items-center gap-4 pointer-events-auto">
                <button 
                  onClick={handleSave}
-                 className="flex items-center h-9 px-4 rounded-xl bg-zinc-900 border border-white/10 text-white text-[13px] font-semibold shadow-2xl hover:bg-zinc-800 active:scale-95 transition-all gap-2 group"
+                 className="flex items-center h-9 px-4 rounded-xl bg-primary text-primary-foreground text-[13px] font-semibold shadow-lg hover:bg-primary/90 active:scale-95 transition-all gap-2 group"
                >
-                 <Save className="h-4 w-4 text-emerald-400 group-hover:scale-110 transition-transform" />
+                 <Save className="h-4 w-4 group-hover:scale-110 transition-transform" />
                  Save
                </button>
                <UserMenu />
@@ -1505,51 +1608,51 @@ export default function ProjectPage() {
                      }}
                    >
                     {/* Modern Floating Toolbar */}
-                    {(selectedArtifactIndex === index || isPanning || isDraggingFrame || (artifact.isComplete && selectedArtifactIndex === index)) && (
+                    {activeTool === 'select' && (selectedArtifactIndex === index || (artifact.isComplete && selectedArtifactIndex === index)) && (
                       <div className={cn(
                         "absolute -top-20 left-1/2 -translate-x-1/2 flex items-center gap-3 z-[70] animate-in fade-in slide-in-from-bottom-2 duration-300 pointer-events-auto",
-                        selectedArtifactIndex !== index && !isPanning && !isDraggingFrame && "opacity-0 group-hover:opacity-100"
+                        selectedArtifactIndex !== index && "opacity-0 group-hover:opacity-100"
                       )} onMouseDown={(e) => e.stopPropagation()}>
                         
                         {/* Main Toolbar Container */}
-                        <div className="flex items-center gap-1 px-2 py-1.5 bg-zinc-900 border border-white/5 rounded-2xl shadow-2xl">
+                        <div className="flex items-center gap-1 px-2 py-1.5 bg-card/95 backdrop-blur-md border border-border rounded-2xl shadow-2xl">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button 
                                 variant="ghost" 
                                 size="sm" 
                                 disabled={status !== 'ready'}
-                                className="h-9 px-3 text-white hover:bg-white/10 rounded-xl flex items-center gap-2 text-[13px] font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="h-9 px-3 text-foreground hover:bg-muted rounded-xl flex items-center gap-2 text-[13px] font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 {status !== 'ready' ? (
-                                  <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />
+                                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
                                 ) : (
-                                  <Sparkles className="h-4 w-4 text-indigo-400" />
+                                  <Sparkles className="h-4 w-4 text-primary" />
                                 )}
                                 Generate
                                 <ChevronDown className="h-3.5 w-3.5 opacity-50" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="center" className="w-56 bg-zinc-900 border-white/10 text-zinc-200 rounded-xl shadow-2xl p-1.5 z-[100]">
+                            <DropdownMenuContent align="center" className="w-56 bg-card border-border text-foreground rounded-xl shadow-2xl p-1.5 z-[100]">
                               <DropdownMenuItem 
                                 onClick={() => handleArtifactAction('more', artifact)}
-                                className="flex items-center gap-2 px-3 py-2.5 rounded-lg hover:bg-white/10 cursor-pointer text-[13px] font-medium"
+                                className="flex items-center gap-2 px-3 py-2.5 rounded-lg hover:bg-muted cursor-pointer text-[13px] font-medium"
                               >
-                                <Plus className="h-4 w-4 text-indigo-400" />
+                                <Plus className="h-4 w-4 text-primary" />
                                 Create more pages
                               </DropdownMenuItem>
                               <DropdownMenuItem 
                                 onClick={() => handleArtifactAction('regenerate', artifact)}
-                                className="flex items-center gap-2 px-3 py-2.5 rounded-lg hover:bg-white/10 cursor-pointer text-[13px] font-medium"
+                                className="flex items-center gap-2 px-3 py-2.5 rounded-lg hover:bg-muted cursor-pointer text-[13px] font-medium"
                               >
-                                <RotateCcw className="h-4 w-4 text-emerald-400" />
+                                <RotateCcw className="h-4 w-4 text-primary" />
                                 Regenerate
                               </DropdownMenuItem>
                               <DropdownMenuItem 
                                 onClick={() => handleArtifactAction('variations', artifact)}
-                                className="flex items-center gap-2 px-3 py-2.5 rounded-lg hover:bg-white/10 cursor-pointer text-[13px] font-medium"
+                                className="flex items-center gap-2 px-3 py-2.5 rounded-lg hover:bg-muted cursor-pointer text-[13px] font-medium"
                               >
-                                <Columns className="h-4 w-4 text-amber-400" />
+                                <Columns className="h-4 w-4 text-primary" />
                                 Variations
                               </DropdownMenuItem>
                             </DropdownMenuContent>
@@ -1568,12 +1671,12 @@ export default function ProjectPage() {
                                 }
                             }}
                             className={cn(
-                                "h-9 w-9 text-white rounded-xl flex items-center justify-center transition-all disabled:opacity-30",
-                                leftSidebarMode === 'properties' ? "bg-indigo-600 shadow-lg shadow-indigo-500/20" : "hover:bg-white/10"
+                                "h-9 w-9 text-foreground rounded-xl flex items-center justify-center transition-all disabled:opacity-30",
+                                leftSidebarMode === 'properties' ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20" : "hover:bg-muted"
                             )}
                             title="Edit Mode"
                           >
-                            <Pencil className="h-4 w-4 opacity-70" />
+                            <Pencil className="h-4 w-4" />
                           </Button>
 
                           <Button 
@@ -1588,12 +1691,12 @@ export default function ProjectPage() {
                                 }
                             }}
                             className={cn(
-                                "h-9 w-9 text-white rounded-xl flex items-center justify-center transition-all disabled:opacity-30",
-                                leftSidebarMode === 'theme' ? "bg-indigo-600 shadow-lg shadow-indigo-500/20" : "hover:bg-white/10"
+                                "h-9 w-9 text-foreground rounded-xl flex items-center justify-center transition-all disabled:opacity-30",
+                                leftSidebarMode === 'theme' ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20" : "hover:bg-muted"
                             )}
                             title="Theme Settings"
                           >
-                            <Palette className="h-4 w-4 opacity-70" />
+                            <Palette className="h-4 w-4" />
                           </Button>
                           
                           <DropdownMenu>
@@ -1601,7 +1704,7 @@ export default function ProjectPage() {
                               <Button 
                                 variant="ghost" 
                                 size="sm" 
-                                className="h-9 px-3 text-white hover:bg-white/10 rounded-xl flex items-center gap-2 text-[13px] font-medium"
+                                className="h-9 px-3 text-foreground hover:bg-muted rounded-xl flex items-center gap-2 text-[13px] font-medium"
                               >
                                 {(() => {
                                   const mode = artifactPreviewModes[index] || (artifact.type === 'app' ? 'mobile' : 'desktop');
@@ -1613,33 +1716,33 @@ export default function ProjectPage() {
                                 <ChevronDown className="h-3.5 w-3.5 opacity-50" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="center" className="w-48 bg-zinc-900 border-white/10 text-zinc-200 rounded-xl shadow-2xl p-1.5 z-[100]">
+                            <DropdownMenuContent align="center" className="w-48 bg-card border-border text-foreground rounded-xl shadow-2xl p-1.5 z-[100]">
                               <DropdownMenuItem 
                                 onClick={() => setArtifactPreviewModes(prev => ({ ...prev, [index]: 'mobile' }))}
-                                className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-white/10 cursor-pointer text-[13px]"
+                                className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-muted cursor-pointer text-[13px]"
                               >
                                 <div className="flex items-center gap-2">
                                   <Smartphone className="h-4 w-4" /> Mobile
                                 </div>
-                                <span className="text-[10px] text-zinc-500">380px</span>
+                                <span className="text-[10px] text-muted-foreground">380px</span>
                               </DropdownMenuItem>
                               <DropdownMenuItem 
                                 onClick={() => setArtifactPreviewModes(prev => ({ ...prev, [index]: 'tablet' }))}
-                                className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-white/10 cursor-pointer text-[13px]"
+                                className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-muted cursor-pointer text-[13px]"
                               >
                                 <div className="flex items-center gap-2">
                                   <Tablet className="h-4 w-4" /> Tablet
                                 </div>
-                                <span className="text-[10px] text-zinc-500">768px</span>
+                                <span className="text-[10px] text-muted-foreground">768px</span>
                               </DropdownMenuItem>
                               <DropdownMenuItem 
                                 onClick={() => setArtifactPreviewModes(prev => ({ ...prev, [index]: 'desktop' }))}
-                                className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-white/10 cursor-pointer text-[13px]"
+                                className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-muted cursor-pointer text-[13px]"
                               >
                                 <div className="flex items-center gap-2">
                                   <Monitor className="h-4 w-4" /> Desktop
                                 </div>
-                                <span className="text-[10px] text-zinc-500">1280px</span>
+                                <span className="text-[10px] text-muted-foreground">1280px</span>
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -1651,44 +1754,44 @@ export default function ProjectPage() {
                               <Button 
                                 variant="ghost" 
                                 size="sm" 
-                                className="h-9 w-9 p-0 text-white hover:bg-white/10 rounded-xl flex items-center justify-center font-medium"
+                                className="h-9 w-9 p-0 text-foreground hover:bg-muted rounded-xl flex items-center justify-center font-medium"
                               >
-                                <MoreHorizontal className="h-4 w-4 opacity-70" />
+                                <MoreHorizontal className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-52 bg-zinc-900 border-white/10 text-zinc-200 rounded-xl shadow-2xl p-1.5 z-[100]">
+                            <DropdownMenuContent align="end" className="w-52 bg-card border-border text-foreground rounded-xl shadow-2xl p-1.5 z-[100]">
                               <DropdownMenuItem 
                                 onClick={() => openCodeViewer(index)}
-                                className="flex items-center gap-2 px-3 py-2.5 rounded-lg hover:bg-white/10 cursor-pointer text-[13px]"
+                                className="flex items-center gap-2 px-3 py-2.5 rounded-lg hover:bg-muted cursor-pointer text-[13px]"
                               >
-                                <Code className="h-4 w-4 text-zinc-400" />
+                                <Code className="h-4 w-4 text-muted-foreground" />
                                 View Code
                               </DropdownMenuItem>
                               <DropdownMenuItem 
                                 onClick={() => handleExportZip(index)}
-                                className="flex items-center gap-2 px-3 py-2.5 rounded-lg hover:bg-white/10 cursor-pointer text-[13px]"
+                                className="flex items-center gap-2 px-3 py-2.5 rounded-lg hover:bg-muted cursor-pointer text-[13px]"
                               >
-                                <ExternalLink className="h-4 w-4 text-zinc-400" />
+                                <ExternalLink className="h-4 w-4 text-muted-foreground" />
                                 Export (ZIP)
                               </DropdownMenuItem>
                               <DropdownMenuItem 
                                 onClick={() => handleDownloadImage(index)}
-                                className="flex items-center gap-2 px-3 py-2.5 rounded-lg hover:bg-white/10 cursor-pointer text-[13px]"
+                                className="flex items-center gap-2 px-3 py-2.5 rounded-lg hover:bg-muted cursor-pointer text-[13px]"
                               >
-                                <ImageIcon className="h-4 w-4 text-zinc-400" />
+                                <ImageIcon className="h-4 w-4 text-muted-foreground" />
                                 Download Image
                               </DropdownMenuItem>
                               <DropdownMenuItem 
                                 onClick={exportAsHTML}
-                                className="flex items-center gap-2 px-3 py-2.5 rounded-lg hover:bg-white/10 cursor-pointer text-[13px]"
+                                className="flex items-center gap-2 px-3 py-2.5 rounded-lg hover:bg-muted cursor-pointer text-[13px]"
                               >
-                                <Download className="h-4 w-4 text-zinc-400" />
+                                <Download className="h-4 w-4 text-muted-foreground" />
                                 Download HTML
                               </DropdownMenuItem>
-                              <div className="h-px bg-white/5 my-1" />
+                              <div className="h-px bg-border my-1" />
                               <DropdownMenuItem 
                                 onClick={() => deleteArtifact(index)}
-                                className="flex items-center gap-2 px-3 py-2.5 rounded-lg hover:bg-red-500/20 text-red-400 cursor-pointer text-[13px]"
+                                className="flex items-center gap-2 px-3 py-2.5 rounded-lg hover:bg-destructive/20 text-destructive cursor-pointer text-[13px]"
                               >
                                 <Trash2 className="h-4 w-4" />
                                 Delete Screen
@@ -1698,20 +1801,20 @@ export default function ProjectPage() {
                         </div>
 
                         {/* Feedback Container */}
-                        <div className="flex items-center gap-0.5 px-1.5 py-1.5 bg-zinc-900 border border-white/5 rounded-2xl shadow-2xl">
+                        <div className="flex items-center gap-0.5 px-1.5 py-1.5 bg-card/95 backdrop-blur-md border border-border rounded-2xl shadow-2xl">
                           <Button 
                             variant="ghost" 
                             size="sm" 
-                            className="h-9 w-9 p-0 text-white hover:bg-white/10 rounded-xl"
+                            className="h-9 w-9 p-0 text-foreground hover:bg-muted rounded-xl"
                           >
-                            <ThumbsUp className="h-4 w-4 opacity-70" />
+                            <ThumbsUp className="h-4 w-4" />
                           </Button>
                           <Button 
                             variant="ghost" 
                             size="sm" 
-                            className="h-9 w-9 p-0 text-white hover:bg-white/10 rounded-xl"
+                            className="h-9 w-9 p-0 text-foreground hover:bg-muted rounded-xl"
                           >
-                            <ThumbsDown className="h-4 w-4 opacity-70" />
+                            <ThumbsDown className="h-4 w-4" />
                           </Button>
                         </div>
                       </div>
@@ -1886,18 +1989,6 @@ export default function ProjectPage() {
             >
                <Hand className="h-5 w-5" />
             </Button>
-            <Button 
-              onClick={() => setActiveTool('interact')}
-              variant="ghost" 
-              size="icon" 
-              className={cn(
-                "h-10 w-10 rounded-xl transition-all",
-                activeTool === 'interact' ? "bg-primary text-background shadow-lg shadow-primary/20" : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              )}
-              title="Interact Tool (I)"
-            >
-               <MousePointerClick className="h-5 w-5" />
-            </Button>
             <div className="w-[1px] h-6 bg-border mx-1" />
             <Button 
               onClick={() => setZoom(prev => Math.min(prev * 1.2, 5))}
@@ -2057,6 +2148,47 @@ export default function ProjectPage() {
                   </Button>
               </DialogFooter>
           </DialogContent>
+      </Dialog>
+
+      {/* Edit Title Dialog */}
+      <Dialog open={isEditTitleDialogOpen} onOpenChange={setIsEditTitleDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Edit Project Title</DialogTitle>
+            <DialogDescription>
+              Update the title for your project.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <input
+              type="text"
+              value={editingTitle}
+              onChange={(e) => setEditingTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  updateProjectTitle(editingTitle);
+                }
+              }}
+              placeholder="Enter project title"
+              className="w-full px-4 py-3 bg-muted border border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsEditTitleDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => updateProjectTitle(editingTitle)}
+              disabled={!editingTitle.trim()}
+            >
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
     </div>
   );
