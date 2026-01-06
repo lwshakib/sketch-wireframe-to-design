@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 
 type Props = {
   selectedEl: HTMLElement | null;
+  setSelectedEl: (el: HTMLElement | null) => void;
   clearSelection: () => void;
   onUpdate: () => void;
 };
@@ -15,40 +16,52 @@ type Props = {
 type Align = "left" | "center" | "right";
 
 const fontSizes = Array.from({ length: 12 }, (_, i) => 12 + i * 4); // 12..56
-const fontWeights = ["400", "500", "600", "700", "800"];
-const lineHeights = ["normal", "1.2", "1.4", "1.6", "1.8", "2"];
+const fontWeights = ["100", "200", "300", "400", "500", "600", "700", "800", "900"];
+const lineHeights = ["normal", "1", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.8", "2"];
 
-export function ElementSettings({ selectedEl, clearSelection, onUpdate }: Props) {
+export function ElementSettings({ selectedEl, setSelectedEl, clearSelection, onUpdate }: Props) {
   const [classes, setClasses] = useState<string[]>([]);
   const [newClass, setNewClass] = useState<string>("");
   const [align, setAlign] = useState<Align>("left");
   const [fontSize, setFontSize] = useState<string>("16px");
   const [fontWeight, setFontWeight] = useState<string>("400");
   const [lineHeight, setLineHeight] = useState<string>("1.4");
-  const [letterSpacing, setLetterSpacing] = useState<string>("0px");
   const [color, setColor] = useState<string>("#ffffff");
   const [background, setBackground] = useState<string>("#000000");
   const [borderRadius, setBorderRadius] = useState<string>("");
   const [padding, setPadding] = useState<string>("");
   const [margin, setMargin] = useState<string>("");
+  const [width, setWidth] = useState<string>("");
+  const [height, setHeight] = useState<string>("");
+  const [borderWidth, setBorderWidth] = useState<string>("");
+  const [borderColor, setBorderColor] = useState<string>("#e2e8f0");
+  const [borderStyle, setBorderStyle] = useState<string>("none");
+  const [display, setDisplay] = useState<string>("block");
+  const [flexDirection, setFlexDirection] = useState<string>("row");
+  const [justifyContent, setJustifyContent] = useState<string>("flex-start");
+  const [alignItems, setAlignItems] = useState<string>("stretch");
+  const [gap, setGap] = useState<string>("");
+  const [zIndex, setZIndex] = useState<string>("");
   const [textContent, setTextContent] = useState<string>("");
   const [opacity, setOpacity] = useState<string>("1");
   const [boxShadow, setBoxShadow] = useState<string>("");
   const [initialInlineStyle, setInitialInlineStyle] = useState<string>("");
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">(
-    "idle"
-  );
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
 
   const label = useMemo(() => {
     if (!selectedEl) return "";
-    const tag = selectedEl.tagName.toLowerCase();
-    const id = selectedEl.id ? `#${selectedEl.id}` : "";
-    const cls =
-      typeof selectedEl.className === "string" && selectedEl.className.trim()
-        ? `.${selectedEl.className.trim().replace(/\s+/g, ".")}`
-        : "";
-    return `${tag}${id}${cls}`;
+    return selectedEl.tagName.toLowerCase();
   }, [selectedEl]);
+
+  const debouncedUpdate = useMemo(() => {
+    let timeout: NodeJS.Timeout;
+    return () => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        onUpdate();
+      }, 300);
+    };
+  }, [onUpdate]);
 
   const applyStyle = (property: string, value: string) => {
     if (!selectedEl) return;
@@ -57,23 +70,16 @@ export function ElementSettings({ selectedEl, clearSelection, onUpdate }: Props)
     } else {
       selectedEl.style[property as any] = value;
     }
-    onUpdate();
+    debouncedUpdate();
   };
 
   const syncFromElement = (el: HTMLElement) => {
     const computed = getComputedStyle(el);
-    setAlign(
-      (el.style.textAlign as Align) ||
-        (el.getAttribute("align") as Align) ||
-        (computed.textAlign as Align) ||
-        "left"
-    );
+    setAlign((el.style.textAlign as Align) || (computed.textAlign as Align) || "left");
     setFontSize(el.style.fontSize || computed.fontSize || "16px");
     setFontWeight(el.style.fontWeight || computed.fontWeight || "400");
     setLineHeight(el.style.lineHeight || computed.lineHeight || "1.4");
-    setLetterSpacing(el.style.letterSpacing || computed.letterSpacing || "0px");
     
-    // Normalize color values to hex for picker
     const toHex = (rgb: string) => {
         if (!rgb || rgb === "transparent") return "#000000";
         const res = rgb.match(/\d+/g);
@@ -83,11 +89,22 @@ export function ElementSettings({ selectedEl, clearSelection, onUpdate }: Props)
 
     setColor(toHex(el.style.color || computed.color));
     setBackground(toHex(el.style.backgroundColor || computed.backgroundColor));
-    setBorderRadius(el.style.borderRadius || computed.borderRadius || "");
-    setPadding(el.style.padding || computed.padding || "");
-    setMargin(el.style.margin || computed.margin || "");
+    setBorderRadius(el.style.borderRadius || (computed.borderRadius !== '0px' ? computed.borderRadius : ""));
+    setPadding(el.style.padding || "");
+    setMargin(el.style.margin || "");
+    setWidth(el.style.width || "");
+    setHeight(el.style.height || "");
+    setBorderWidth(el.style.borderWidth || (computed.borderWidth !== '0px' ? computed.borderWidth : ""));
+    setBorderStyle(el.style.borderStyle || computed.borderStyle || "none");
+    setBorderColor(toHex(el.style.borderColor || computed.borderColor));
+    setDisplay(el.style.display || computed.display || "block");
+    setFlexDirection(el.style.flexDirection || computed.flexDirection || "row");
+    setJustifyContent(el.style.justifyContent || computed.justifyContent || "flex-start");
+    setAlignItems(el.style.alignItems || computed.alignItems || "stretch");
+    setGap(el.style.gap || "");
+    setZIndex(el.style.zIndex || computed.zIndex || "");
     setOpacity(el.style.opacity || computed.opacity || "1");
-    setBoxShadow(el.style.boxShadow || computed.boxShadow || "");
+    setBoxShadow(el.style.boxShadow || (computed.boxShadow !== 'none' ? computed.boxShadow : ""));
     setTextContent(el.textContent || "");
     setInitialInlineStyle(el.getAttribute("style") || "");
   };
@@ -99,58 +116,38 @@ export function ElementSettings({ selectedEl, clearSelection, onUpdate }: Props)
 
   useEffect(() => {
     if (!selectedEl) return;
-    
-    // Handle className as string (for regular elements) or SVGAnimatedString (for SVG elements)
-    const classNameStr = typeof selectedEl.className === 'string' 
-      ? selectedEl.className 
-      : (selectedEl.className as any)?.baseVal || '';
-    
-    const current = classNameStr
-      .split(" ")
-      .map((c: string) => c.trim())
-      .filter(Boolean);
-    setClasses(current);
-
     const observer = new MutationObserver(() => {
-      const classNameStr = typeof selectedEl.className === 'string' 
-        ? selectedEl.className 
-        : (selectedEl.className as any)?.baseVal || '';
-      
-      const updated = classNameStr
-        .split(" ")
-        .map((c: string) => c.trim())
-        .filter(Boolean);
-      setClasses(updated);
+      const classNameStr = typeof selectedEl.className === 'string' ? selectedEl.className : (selectedEl.className as any)?.baseVal || '';
+      setClasses(classNameStr.split(" ").filter(Boolean));
     });
-
-    observer.observe(selectedEl, {
-      attributes: true,
-      attributeFilter: ["class"],
-    });
-
+    observer.observe(selectedEl, { attributes: true, attributeFilter: ["class"] });
     return () => observer.disconnect();
   }, [selectedEl]);
 
-  const removeClass = (cls: string) => {
-    if (!selectedEl) return;
-    const updated = classes.filter((c) => c !== cls);
-    setClasses(updated);
-    selectedEl.className = updated.join(" ");
-    onUpdate();
+  const selectParent = () => {
+    if (selectedEl?.parentElement && selectedEl.parentElement !== selectedEl.ownerDocument.body) {
+        const parent = selectedEl.parentElement;
+        selectedEl.classList.remove('edit-selected-highlight');
+        parent.classList.add('edit-selected-highlight');
+        setSelectedEl(parent);
+    }
   };
 
-  const addClass = () => {
-    if (!selectedEl) return;
-    const trimmed = newClass.trim();
-    if (!trimmed || classes.includes(trimmed)) {
-      setNewClass("");
-      return;
+  const deleteElement = () => {
+    if (selectedEl) {
+        selectedEl.remove();
+        setSelectedEl(null);
+        onUpdate();
     }
-    const updated = [...classes, trimmed];
-    setClasses(updated);
-    selectedEl.className = updated.join(" ");
-    setNewClass("");
-    onUpdate();
+  };
+
+  const duplicateElement = () => {
+    if (selectedEl) {
+        const clone = selectedEl.cloneNode(true) as HTMLElement;
+        clone.classList.remove('edit-selected-highlight');
+        selectedEl.after(clone);
+        onUpdate();
+    }
   };
 
   const resetInlineStyles = () => {
@@ -158,18 +155,6 @@ export function ElementSettings({ selectedEl, clearSelection, onUpdate }: Props)
     selectedEl.setAttribute("style", initialInlineStyle);
     syncFromElement(selectedEl);
     onUpdate();
-  };
-
-  const copySelector = async () => {
-    if (!label) return;
-    try {
-      await navigator.clipboard.writeText(label);
-      setCopyState("copied");
-      setTimeout(() => setCopyState("idle"), 1500);
-    } catch {
-      setCopyState("error");
-      setTimeout(() => setCopyState("idle"), 1500);
-    }
   };
 
   if (!selectedEl) return (
@@ -186,7 +171,6 @@ export function ElementSettings({ selectedEl, clearSelection, onUpdate }: Props)
 
   return (
     <div className="h-full flex flex-col bg-zinc-950 animate-in fade-in duration-300">
-      {/* Header */}
       <div className="p-4 border-b border-white/5 flex items-center justify-between bg-zinc-900/50">
         <div className="flex flex-col">
             <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-0.5">Properties</span>
@@ -198,80 +182,73 @@ export function ElementSettings({ selectedEl, clearSelection, onUpdate }: Props)
       </div>
 
       <div className="flex-1 overflow-y-auto scrollbar-hide p-4 space-y-6">
-        {/* Actions */}
-        <div className="grid grid-cols-2 gap-2">
-            <Button onClick={resetInlineStyles} variant="outline" className="h-9 text-[11px] font-bold border-zinc-800 bg-transparent text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl gap-2">
+        <div className="flex gap-2 p-2 bg-zinc-900/30 rounded-xl border border-white/5">
+            <button onClick={selectParent} className="flex-1 flex flex-col items-center gap-1.5 p-2 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-white transition-all">
+                <Move className="size-3.5" />
+                <span className="text-[9px] font-bold uppercase">Parent</span>
+            </button>
+            <button onClick={duplicateElement} className="flex-1 flex flex-col items-center gap-1.5 p-2 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-white transition-all">
+                <Copy className="size-3.5" />
+                <span className="text-[9px] font-bold uppercase">Clone</span>
+            </button>
+            <button onClick={deleteElement} className="flex-1 flex flex-col items-center gap-1.5 p-2 rounded-lg hover:bg-red-900/20 text-zinc-500 hover:text-red-400 transition-all">
+                <Trash2 className="size-3.5" />
+                <span className="text-[9px] font-bold uppercase">Delete</span>
+            </button>
+            <button onClick={resetInlineStyles} className="flex-1 flex flex-col items-center gap-1.5 p-2 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-white transition-all">
                 <RotateCcw className="size-3.5" />
-                RESET
-            </Button>
-            <Button onClick={copySelector} variant="outline" className="h-9 text-[11px] font-bold border-zinc-800 bg-transparent text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl gap-2">
-                {copyState === "copied" ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-                {copyState === "copied" ? "COPIED" : "SELECTOR"}
-            </Button>
+                <span className="text-[9px] font-bold uppercase">Reset</span>
+            </button>
         </div>
 
-        {/* Typography */}
         <div className="space-y-4">
             <div className="flex items-center gap-2 mb-2">
                 <Type className="size-3.5 text-zinc-500" />
                 <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Typography</span>
             </div>
-            
             <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                     <label className="text-[11px] font-bold text-zinc-400 ml-1">Size</label>
                     <select
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 appearance-none"
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-xs text-zinc-200"
                         value={fontSize}
-                        onChange={(e) => applyStyle("fontSize", e.target.value)}
+                        onChange={(e) => { setFontSize(e.target.value); applyStyle("fontSize", e.target.value); }}
                     >
-                        {fontSizes.map((size) => (
-                            <option key={size} value={`${size}px`}>{size}px</option>
-                        ))}
+                        {fontSizes.map((size) => <option key={size} value={`${size}px`}>{size}px</option>)}
                     </select>
                 </div>
                 <div className="space-y-1.5">
                     <label className="text-[11px] font-bold text-zinc-400 ml-1">Weight</label>
                     <select
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 appearance-none"
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-xs text-zinc-200"
                         value={fontWeight}
-                        onChange={(e) => applyStyle("fontWeight", e.target.value)}
+                        onChange={(e) => { setFontWeight(e.target.value); applyStyle("fontWeight", e.target.value); }}
                     >
-                        {fontWeights.map((weight) => (
-                            <option key={weight} value={weight}>{weight}</option>
-                        ))}
+                        {fontWeights.map((weight) => <option key={weight} value={weight}>{weight}</option>)}
                     </select>
                 </div>
             </div>
-
             <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                     <label className="text-[11px] font-bold text-zinc-400 ml-1">Line Height</label>
                     <select
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 appearance-none"
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-xs text-zinc-200"
                         value={lineHeight}
-                        onChange={(e) => applyStyle("lineHeight", e.target.value)}
+                        onChange={(e) => { setLineHeight(e.target.value); applyStyle("lineHeight", e.target.value); }}
                     >
-                        {lineHeights.map((lh) => (
-                            <option key={lh} value={lh}>{lh}</option>
-                        ))}
+                        {lineHeights.map((lh) => <option key={lh} value={lh}>{lh}</option>)}
                     </select>
                 </div>
                 <div className="space-y-1.5">
                     <label className="text-[11px] font-bold text-zinc-400 ml-1">Alignment</label>
-                    <div className="flex bg-zinc-900 border border-zinc-800 rounded-xl p-1 h-[34px]">
+                    <div className="flex bg-zinc-900 border border-zinc-800 rounded-xl p-1 gap-1">
                         {(["left", "center", "right"] as Align[]).map((dir) => (
                             <button
                                 key={dir}
-                                onClick={() => applyStyle("textAlign", dir)}
-                                className={cn(
-                                    "flex-1 flex items-center justify-center rounded-lg transition-all",
-                                    align === dir ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-zinc-300"
-                                )}
+                                onClick={() => { setAlign(dir); applyStyle("textAlign", dir); }}
+                                className={cn("flex-1 flex items-center justify-center rounded-lg p-1.5 transition-all", align === dir ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-zinc-300")}
                             >
-                                {dir === "left" && <AlignLeft className="size-3.5" />}
-                                {dir === "center" && <AlignCenter className="size-3.5" />}
-                                {dir === "right" && <AlignRight className="size-3.5" />}
+                                {dir === "left" ? <AlignLeft className="size-3.5" /> : dir === "center" ? <AlignCenter className="size-3.5" /> : <AlignRight className="size-3.5" />}
                             </button>
                         ))}
                     </div>
@@ -279,24 +256,17 @@ export function ElementSettings({ selectedEl, clearSelection, onUpdate }: Props)
             </div>
         </div>
 
-        {/* Colors & Appearance */}
         <div className="space-y-4">
             <div className="flex items-center gap-2 mb-2">
                 <Palette className="size-3.5 text-zinc-500" />
-                <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Appearance</span>
+                <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Colors</span>
             </div>
-            
             <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-zinc-400 ml-1">Text Color</label>
-                    <div className="relative group/color">
-                        <input
-                            type="color"
-                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                            value={color}
-                            onChange={(e) => applyStyle("color", e.target.value)}
-                        />
-                        <div className="w-full h-9 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center px-3 gap-2 pointer-events-none group-hover/color:border-zinc-700 transition-colors">
+                    <label className="text-[11px] font-bold text-zinc-400 ml-1">Text</label>
+                    <div className="relative">
+                        <input type="color" className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" value={color} onInput={(e) => { const val = (e.target as HTMLInputElement).value; setColor(val); applyStyle("color", val); }} />
+                        <div className="w-full h-9 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center px-3 gap-2">
                             <div className="size-4 rounded-full border border-white/10" style={{ backgroundColor: color }} />
                             <span className="text-[10px] font-mono text-zinc-400 uppercase">{color}</span>
                         </div>
@@ -304,144 +274,102 @@ export function ElementSettings({ selectedEl, clearSelection, onUpdate }: Props)
                 </div>
                 <div className="space-y-1.5">
                     <label className="text-[11px] font-bold text-zinc-400 ml-1">Background</label>
-                    <div className="relative group/color">
-                        <input
-                            type="color"
-                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                            value={background}
-                            onChange={(e) => applyStyle("backgroundColor", e.target.value)}
-                        />
-                        <div className="w-full h-9 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center px-3 gap-2 pointer-events-none group-hover/color:border-zinc-700 transition-colors">
+                    <div className="relative">
+                        <input type="color" className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" value={background} onInput={(e) => { const val = (e.target as HTMLInputElement).value; setBackground(val); applyStyle("backgroundColor", val); }} />
+                        <div className="w-full h-9 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center px-3 gap-2">
                             <div className="size-4 rounded-full border border-white/10" style={{ backgroundColor: background }} />
                             <span className="text-[10px] font-mono text-zinc-400 uppercase">{background}</span>
                         </div>
                     </div>
                 </div>
             </div>
-
-            <div className="space-y-1.5">
-                <div className="flex justify-between ml-1">
-                    <label className="text-[11px] font-bold text-zinc-400">Opacity</label>
-                    <span className="text-[10px] font-mono text-zinc-500">{Math.round(parseFloat(opacity) * 100)}%</span>
-                </div>
-                <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.01"
-                    value={opacity}
-                    onChange={(e) => applyStyle("opacity", e.target.value)}
-                    className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500 mt-2"
-                />
-            </div>
         </div>
 
-        {/* Layout & Spacing */}
         <div className="space-y-4">
             <div className="flex items-center gap-2 mb-2">
                 <Layout className="size-3.5 text-zinc-500" />
                 <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Layout</span>
             </div>
-            
+            <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-zinc-400 ml-1">Width</label>
+                    <input type="text" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-xs text-zinc-200" value={width} onChange={(e) => { setWidth(e.target.value); applyStyle("width", e.target.value); }} placeholder="auto" />
+                </div>
+                <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-zinc-400 ml-1">Height</label>
+                    <input type="text" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-xs text-zinc-200" value={height} onChange={(e) => { setHeight(e.target.value); applyStyle("height", e.target.value); }} placeholder="auto" />
+                </div>
+            </div>
             <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                     <label className="text-[11px] font-bold text-zinc-400 ml-1">Padding</label>
-                    <input
-                        type="text"
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
-                        placeholder="e.g. 16px"
-                        value={padding}
-                        onChange={(e) => applyStyle("padding", e.target.value)}
-                    />
+                    <input type="text" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-xs text-zinc-200" value={padding} onChange={(e) => { setPadding(e.target.value); applyStyle("padding", e.target.value); }} placeholder="0px" />
                 </div>
                 <div className="space-y-1.5">
                     <label className="text-[11px] font-bold text-zinc-400 ml-1">Margin</label>
-                    <input
-                        type="text"
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
-                        placeholder="e.g. 8px"
-                        value={margin}
-                        onChange={(e) => applyStyle("margin", e.target.value)}
-                    />
+                    <input type="text" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-xs text-zinc-200" value={margin} onChange={(e) => { setMargin(e.target.value); applyStyle("margin", e.target.value); }} placeholder="0px" />
                 </div>
             </div>
+            <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-zinc-400 ml-1">Display</label>
+                    <select className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-xs text-zinc-200" value={display} onChange={(e) => { setDisplay(e.target.value); applyStyle("display", e.target.value); }}>
+                        <option value="block">Block</option>
+                        <option value="flex">Flex</option>
+                        <option value="inline-block">Inline-Block</option>
+                        <option value="grid">Grid</option>
+                        <option value="none">Hidden</option>
+                    </select>
+                </div>
+                <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-zinc-400 ml-1">Z-Index</label>
+                    <input type="text" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-xs text-zinc-200" value={zIndex} onChange={(e) => { setZIndex(e.target.value); applyStyle("zIndex", e.target.value); }} placeholder="auto" />
+                </div>
+            </div>
+        </div>
 
+        <div className="space-y-4 pt-2 border-t border-white/5">
+            <div className="flex items-center gap-2 mb-2">
+                <Box className="size-3.5 text-zinc-500" />
+                <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Borders & Effects</span>
+            </div>
             <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                     <label className="text-[11px] font-bold text-zinc-400 ml-1">Radius</label>
-                    <input
-                        type="text"
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
-                        placeholder="e.g. 12px"
-                        value={borderRadius}
-                        onChange={(e) => applyStyle("borderRadius", e.target.value)}
-                    />
+                    <input type="text" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-xs text-zinc-200" value={borderRadius} onChange={(e) => { setBorderRadius(e.target.value); applyStyle("borderRadius", e.target.value); }} placeholder="0px" />
                 </div>
                 <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-zinc-400 ml-1">Shadow</label>
-                    <input
-                        type="text"
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
-                        placeholder="e.g. 0 4px 10px rgba(0,0,0,0.1)"
-                        value={boxShadow}
-                        onChange={(e) => applyStyle("boxShadow", e.target.value)}
-                    />
+                    <label className="text-[11px] font-bold text-zinc-400 ml-1">Opacity</label>
+                    <input type="range" min="0" max="1" step="0.1" className="w-full accent-indigo-500 mt-2" value={opacity} onChange={(e) => { setOpacity(e.target.value); applyStyle("opacity", e.target.value); }} />
                 </div>
             </div>
+            <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-zinc-400 ml-1">Shadow</label>
+                <input type="text" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-xs text-zinc-200" value={boxShadow} onChange={(e) => { setBoxShadow(e.target.value); applyStyle("boxShadow", e.target.value); }} placeholder="none" />
+            </div>
         </div>
 
-        {/* Content */}
-        <div className="space-y-3">
+        <div className="space-y-4 pt-2 border-t border-white/5">
             <div className="flex items-center gap-2 mb-2">
-                <Box className="size-3.5 text-zinc-500" />
+                <Type className="size-3.5 text-zinc-500" />
                 <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Content</span>
             </div>
-            
-            <textarea
-                className="w-full min-h-[80px] bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 resize-none"
-                value={textContent}
-                onChange={(e) => {
-                    setTextContent(e.target.value);
-                    if (selectedEl) {
-                        selectedEl.textContent = e.target.value;
-                        onUpdate();
-                    }
-                }}
-            />
-        </div>
-
-        {/* Class Management */}
-        <div className="space-y-3">
-            <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block ml-1">Classes</span>
-            <div className="flex flex-wrap gap-1.5">
-                {classes.map((cls) => (
-                    <div key={cls} className="group/tag flex items-center gap-1.5 bg-zinc-800/50 border border-white/5 py-1 pl-2.5 pr-1.5 rounded-lg">
-                        <span className="text-[10px] font-bold text-zinc-400">{cls}</span>
-                        <button onClick={() => removeClass(cls)} className="p-0.5 rounded-md hover:bg-red-400/10 text-zinc-500 hover:text-red-400 transition-colors">
-                            <X className="size-3" />
-                        </button>
-                    </div>
-                ))}
-            </div>
-            <div className="flex gap-2">
-                <input
-                    type="text"
-                    className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
-                    placeholder="Add Tailwind class..."
-                    value={newClass}
-                    onChange={(e) => setNewClass(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && addClass()}
+            <div className="space-y-1.5">
+                <textarea
+                    rows={3}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 resize-none"
+                    value={textContent}
+                    onChange={(e) => {
+                        setTextContent(e.target.value);
+                        if (selectedEl) {
+                            selectedEl.textContent = e.target.value;
+                            debouncedUpdate();
+                        }
+                    }}
                 />
-                <Button onClick={addClass} className="h-9 w-9 p-0 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl">
-                    <Plus className="size-4" />
-                </Button>
             </div>
         </div>
       </div>
     </div>
   );
 }
-
-const Plus = ({ className }: { className?: string }) => (
-    <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-);

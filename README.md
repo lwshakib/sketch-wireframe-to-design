@@ -25,10 +25,15 @@
 <div align="center">
   <h3>Light Mode</h3>
   <img src="public/light.png" alt="Light Mode" width="100%" />
+  <img src="public/light1.png" alt="Editor Light Mode" width="100%" />
   <br/><br/>
   
   <h3>Dark Mode</h3>
   <img src="public/dark.png" alt="Dark Mode" width="100%" />
+  <img src="public/dark1.png" alt="Editor Dark Mode" width="100%" />
+  <br/><br/>
+
+
 </div>
 
 ## ✨ Key Features

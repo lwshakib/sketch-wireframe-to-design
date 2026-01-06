@@ -115,104 +115,374 @@ interface Project {
 const SELECTION_BLUE = '#3b82f6';
 
 const getInjectedHTML = (html: string) => {
-  const script = `
-    <script>
-      let lastHeight = 0;
-      
-      const fixVHUnits = () => {
-        // Find elements that might have vh units and convert them to fixed px
-        // This prevents the grow-loop if the AI ignores the 'no vh' rule
-        const elements = document.querySelectorAll('*');
-        elements.forEach(el => {
-          const heightAttr = el.getAttribute('class') || '';
-          if (heightAttr.includes('h-[') && heightAttr.includes('vh]')) {
-             // Extract vh value
-             const match = heightAttr.match(/h-\\[(\\d+)vh\\]/);
-             if (match) {
-               const vhValue = parseInt(match[1]);
-               el.style.height = (vhValue * 8) + 'px'; // Base 800px viewport
-               el.style.minHeight = '0';
-             }
-          }
-        });
-      };
+  // Prevent duplicate injection if the HTML already contains our script
+  if (html.includes('id="sketch-injected-script"') || html.includes("id='sketch-injected-script'")) {
+    return html;
+  }
 
-      const sendHeight = () => {
-        fixVHUnits();
-        
-        const height = Math.max(
-          document.body.scrollHeight,
-          document.documentElement.scrollHeight,
-          document.body.offsetHeight,
-          document.documentElement.offsetHeight
-        );
-        
-        // Loop protection: Cap at 5000px and stop if growing too fast
-        const cappedHeight = Math.min(height, 5000);
-
-        if (Math.abs(cappedHeight - lastHeight) > 5) {
-          lastHeight = cappedHeight;
-          window.parent.postMessage({ type: 'HEIGHT_UPDATE', height: cappedHeight }, '*');
+  const headInjections = `
+    <script id="sketch-tailwind-cdn" src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="sketch-tailwind-config">
+      if (window.tailwind) {
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              colors: {
+                border: "var(--border)",
+                input: "var(--input)",
+                ring: "var(--ring)",
+                background: "var(--background)",
+                foreground: "var(--foreground)",
+                primary: {
+                  DEFAULT: "var(--primary)",
+                  foreground: "var(--primary-foreground)",
+                },
+                secondary: {
+                  DEFAULT: "var(--secondary)",
+                  foreground: "var(--secondary-foreground)",
+                },
+                destructive: {
+                  DEFAULT: "var(--destructive, #ef4444)",
+                  foreground: "var(--destructive-foreground, #ffffff)",
+                },
+                muted: {
+                  DEFAULT: "var(--muted)",
+                  foreground: "var(--muted-foreground)",
+                },
+                accent: {
+                  DEFAULT: "var(--accent)",
+                  foreground: "var(--accent-foreground)",
+                },
+                popover: {
+                  DEFAULT: "var(--popover)",
+                  foreground: "var(--popover-foreground)",
+                },
+                card: {
+                  DEFAULT: "var(--card)",
+                  foreground: "var(--card-foreground)",
+                },
+              },
+              borderRadius: {
+                lg: "var(--radius, 0.5rem)",
+                md: "calc(var(--radius, 0.5rem) - 2px)",
+                sm: "calc(var(--radius, 0.5rem) - 4px)",
+              },
+            },
+          },
         }
-      };
-
-      const observer = new MutationObserver(sendHeight);
-      window.onload = () => {
-        fixVHUnits();
-        sendHeight();
-        observer.observe(document.body, { 
-          childList: true, 
-          subtree: true, 
-          attributes: true,
-          characterData: true
-        });
-        [100, 300, 600, 1000, 2000, 4000].forEach(delay => setTimeout(sendHeight, delay));
-      };
-
-      window.addEventListener('load', sendHeight);
-      try {
-        new ResizeObserver(sendHeight).observe(document.documentElement);
-      } catch (e) {}
-
-      window.addEventListener('message', (event) => {
-        if (event.data.type === 'UPDATE_CONTENT') {
-          const parser = new DOMParser();
-          const newDoc = parser.parseFromString(event.data.content, 'text/html');
-          document.head.innerHTML = newDoc.head.innerHTML;
-          document.body.innerHTML = newDoc.body.innerHTML;
-          fixVHUnits();
-          sendHeight();
-        }
-      });
-    </script>
-    <style>
-      ::-webkit-scrollbar { display: none; }
-      html {
-        height: 800px !important; 
-        overflow-y: visible !important;
-        overflow-x: hidden !important;
       }
-      body { 
-        height: auto !important;
-        min-height: 0 !important;
-        overflow: visible !important;
-        margin: 0; 
-        padding: 0; 
-        background: var(--background); 
+    </script>
+    <style id="sketch-injected-style">
+      html, body {
+        margin: 0;
+        padding: 0;
+        min-height: 100%;
+        background-color: var(--background, #ffffff);
+        color: var(--foreground, #000000);
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+      ::-webkit-scrollbar { display: none; }
+      * { box-sizing: border-box; }
+      body[data-edit-mode="true"] * {
+        pointer-events: auto !important;
+        user-select: none !important;
+      }
+      .edit-hover-highlight {
+        outline: 2px dashed #6366f1 !important;
+        outline-offset: -1px !important;
+        cursor: pointer !important;
+        z-index: 50000 !important;
+      }
+      .edit-selected-highlight {
+        outline: 2px solid #6366f1 !important;
+        outline-offset: -1px !important;
+        box-shadow: 0 0 15px rgba(99, 102, 241, 0.3) !important;
+        z-index: 50001 !important;
       }
     </style>
   `;
-  if (html.toLowerCase().includes('</body>')) {
-    return html.replace(/<\/body>/i, `${script}</body>`);
+
+  const scriptLogic = `
+    <script id="sketch-injected-script">
+      (function() {
+        if (window.__SKETCH_INITIALIZED__) return;
+        window.__SKETCH_INITIALIZED__ = true;
+
+        var lastHeight = 0;
+        var isEditMode = false;
+        var selectedEl = null;
+        var hoveredEl = null;
+
+        var fixVHUnits = function() {
+          var elements = document.querySelectorAll('*');
+          elements.forEach(function(el) {
+            var heightAttr = el.getAttribute('class') || '';
+            if (heightAttr.includes('h-[') && heightAttr.includes('vh]')) {
+               var match = heightAttr.match(/h-\\[(\\d+)vh\\]/);
+               if (match) {
+                 var vhValue = parseInt(match[1]);
+                 el.style.height = (vhValue * 8) + 'px';
+                 el.style.minHeight = '0';
+               }
+            }
+          });
+        };
+
+        var heightTimeout = null;
+        var sendHeight = function() {
+          if (heightTimeout) return;
+          heightTimeout = setTimeout(function() {
+            heightTimeout = null;
+            fixVHUnits();
+            var height = Math.max(
+              document.body.scrollHeight,
+              document.documentElement.scrollHeight,
+              document.body.offsetHeight,
+              document.documentElement.offsetHeight
+            );
+            var cappedHeight = Math.min(height, 5000);
+            if (Math.abs(cappedHeight - lastHeight) > 10) {
+              lastHeight = cappedHeight;
+              window.parent.postMessage({ type: 'HEIGHT_UPDATE', height: cappedHeight }, '*');
+            }
+          }, 100);
+        };
+
+        var clearHover = function() {
+          if (hoveredEl) {
+            hoveredEl.classList.remove('edit-hover-highlight');
+            hoveredEl = null;
+          }
+        };
+
+        var clearSelected = function() {
+          if (selectedEl) {
+            selectedEl.classList.remove('edit-selected-highlight');
+            selectedEl = null;
+          }
+        };
+
+        var getElementPath = function(el) {
+          var path = [];
+          var current = el;
+          while (current && current.nodeType === Node.ELEMENT_NODE && current !== document.body) {
+            var index = 0;
+            var sibling = current.previousElementSibling;
+            while (sibling) {
+              index++;
+              sibling = sibling.previousElementSibling;
+            }
+            path.unshift(index);
+            current = current.parentElement;
+          }
+          return path;
+        };
+
+        var getElementByPath = function(path) {
+          var el = document.body;
+          for (var i = 0; i < path.length; i++) {
+            if (el && el.children[path[i]]) {
+                el = el.children[path[i]];
+            } else {
+                return null;
+            }
+          }
+          return el;
+        };
+
+        var handlePointerMove = function(e) {
+          if (!isEditMode) return;
+          var target = e.target.closest('*');
+          if (!target || target === document.body || target === document.documentElement) {
+            clearHover();
+            return;
+          }
+          if (target.classList.contains('edit-selected-highlight')) {
+            clearHover();
+            return;
+          }
+          if (hoveredEl !== target) {
+            clearHover();
+            hoveredEl = target;
+            hoveredEl.classList.add('edit-hover-highlight');
+          }
+        };
+
+        var handleClick = function(e) {
+          if (!isEditMode) return;
+          e.preventDefault();
+          e.stopPropagation();
+          var target = e.target.closest('*');
+          
+          if (!target || target === document.body || target === document.documentElement) {
+            clearSelected();
+            window.parent.postMessage({ type: 'SELECTION_CLEARED' }, '*');
+            return;
+          }
+          
+          clearSelected();
+          selectedEl = target;
+          selectedEl.classList.add('edit-selected-highlight');
+          clearHover();
+          
+          window.parent.postMessage({ 
+            type: 'ELEMENT_CLICKED', 
+            tagName: target.tagName,
+            id: target.id,
+            className: target.className
+          }, '*');
+        };
+
+        window.addEventListener('pointermove', handlePointerMove, true);
+        window.addEventListener('pointerleave', clearHover, true);
+        window.addEventListener('click', handleClick, true);
+
+        window.addEventListener('message', function(event) {
+          if (event.data.type === 'UPDATE_CONTENT') {
+            var savedPath = selectedEl ? getElementPath(selectedEl) : null;
+            const parser = new DOMParser();
+            const newDoc = parser.parseFromString(event.data.content, 'text/html');
+            
+            // 1. Sync DocumentElement (HTML) Attributes
+            const currentRoot = document.documentElement;
+            const newRoot = newDoc.documentElement;
+            // Remove attributes no longer present
+            Array.from(currentRoot.attributes).forEach(attr => {
+                if (!newRoot.hasAttribute(attr.name)) currentRoot.removeAttribute(attr.name);
+            });
+            // Set/Update attributes from new content
+            Array.from(newRoot.attributes).forEach(attr => {
+                currentRoot.setAttribute(attr.name, attr.value);
+            });
+
+            // 2. Sync Body Attributes
+            const currentBody = document.body;
+            const newBody = newDoc.body;
+            // Remove attributes no longer present (excluding our internal ones)
+            Array.from(currentBody.attributes).forEach(attr => {
+                if (attr.name !== 'data-edit-mode' && !newBody.hasAttribute(attr.name)) {
+                    currentBody.removeAttribute(attr.name);
+                }
+            });
+            // Set/Update attributes from new content
+            Array.from(newBody.attributes).forEach(attr => {
+                if (attr.name !== 'data-edit-mode') {
+                    currentBody.setAttribute(attr.name, attr.value);
+                }
+            });
+
+            // 3. Update Body Content
+            currentBody.innerHTML = newBody.innerHTML;
+
+            // 4. Selective Head Update (Styles and Links)
+            // Remove styles/links from previous AI content
+            Array.from(document.head.children).forEach(child => {
+              if (child.tagName === 'STYLE' || child.tagName === 'LINK') {
+                 if (!child.id || (!child.id.startsWith('sketch-') && child.id !== 'theme-overrides')) {
+                    child.remove();
+                 }
+              }
+            });
+
+            // Add new styles/links from incoming AI content
+            Array.from(newDoc.head.children).forEach(child => {
+              if (child.tagName === 'STYLE' || child.tagName === 'LINK') {
+                if (!child.id || !child.id.startsWith('sketch-')) {
+                   document.head.appendChild(child.cloneNode(true));
+                }
+              }
+            });
+
+            // 5. Re-render styling engine (Tailwind)
+            if (window.tailwind) {
+              try { 
+                window.tailwind.render(); 
+                // Second pass after a micro-task to ensure variables are parsed
+                setTimeout(function() { window.tailwind.render(); }, 50);
+              } catch (e) {}
+            }
+
+            if (savedPath) {
+                var newEl = getElementByPath(savedPath);
+                if (newEl) {
+                    selectedEl = newEl;
+                    selectedEl.classList.add('edit-selected-highlight');
+                    window.parent.postMessage({ 
+                      type: 'ELEMENT_CLICKED', 
+                      tagName: selectedEl.tagName,
+                      id: selectedEl.id,
+                      className: selectedEl.className
+                    }, '*');
+                } else {
+                    selectedEl = null;
+                    window.parent.postMessage({ type: 'SELECTION_CLEARED' }, '*');
+                }
+            }
+
+            fixVHUnits();
+            sendHeight();
+          }
+          if (event.data.type === 'SET_EDIT_MODE') {
+            isEditMode = event.data.enabled;
+            document.body.setAttribute('data-edit-mode', isEditMode ? 'true' : 'false');
+            if (!isEditMode) {
+              clearHover();
+              clearSelected();
+            }
+          }
+          if (event.data.type === 'CLEAR_SELECTION') {
+            clearSelected();
+          }
+        });
+
+        var observer = new MutationObserver(sendHeight);
+        window.onload = function() {
+          fixVHUnits();
+          sendHeight();
+          observer.observe(document.body, { 
+            childList: true, 
+            subtree: true, 
+            attributes: true,
+            characterData: true
+          });
+          [100, 300, 600, 1000, 2000, 4000].forEach(function(delay) { setTimeout(sendHeight, delay); });
+        };
+        window.addEventListener('load', sendHeight);
+      })();
+    </script>
+  `;
+
+  let processedHtml = html;
+  if (/<head\b[^>]*>/i.test(processedHtml)) {
+    processedHtml = processedHtml.replace(/(<head\b[^>]*>)/i, '$1' + headInjections);
+  } else if (/<html\b[^>]*>/i.test(processedHtml)) {
+    processedHtml = processedHtml.replace(/(<html\b[^>]*>)/i, '$1<head>' + headInjections + '</head>');
+  } else {
+    processedHtml = '<head>' + headInjections + '</head>' + processedHtml;
   }
-  return `${html}${script}`;
+
+  if (processedHtml.toLowerCase().includes('</body>')) {
+    return processedHtml.replace(/<\/body>/i, scriptLogic + '</body>');
+  }
+  return processedHtml + scriptLogic;
 };
+
 
 const sanitizeDocumentHtml = (doc: Document, originalHtml: string) => {
   const root = doc.documentElement;
   if (!root) return originalHtml;
 
   const clone = root.cloneNode(true) as HTMLElement;
+  
+  // Remove injected script and style
+  const injectedScript = clone.querySelector('#sketch-injected-script');
+  if (injectedScript) injectedScript.remove();
+  const injectedStyle = clone.querySelector('#sketch-injected-style');
+  if (injectedStyle) injectedStyle.remove();
+
   const walker = doc.createTreeWalker(clone, NodeFilter.SHOW_ELEMENT);
 
   let current = walker.currentNode as HTMLElement | null;
@@ -264,6 +534,131 @@ const ModernShimmer = ({ appliedTheme }: { type?: string; appliedTheme?: any }) 
     </div>
   );
 };
+
+// Optimized Iframe component to prevent reloads during live editing
+interface ArtifactFrameProps {
+  artifact: Artifact;
+  index: number;
+  isEditMode: boolean;
+  activeTool: string;
+  isDraggingFrame: boolean;
+  appliedTheme: any;
+  onRef: (index: number, el: HTMLIFrameElement | null) => void;
+}
+
+const ArtifactFrame = React.memo(({ 
+  artifact, 
+  index, 
+  isEditMode, 
+  activeTool, 
+  isDraggingFrame, 
+  appliedTheme,
+  onRef 
+}: ArtifactFrameProps) => {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [initialSrcDoc] = useState(() => getInjectedHTML(artifact.content));
+  const lastContentRef = useRef(artifact.content);
+
+  const getThemeCSS = useCallback((theme: any) => `
+    :root {
+      --background: ${theme.cssVars.background} !important;
+      --foreground: ${theme.cssVars.foreground} !important;
+      --card: ${theme.cssVars.card} !important;
+      --card-foreground: ${theme.cssVars.cardForeground} !important;
+      --popover: ${theme.cssVars.popover} !important;
+      --popover-foreground: ${theme.cssVars.popoverForeground} !important;
+      --primary: ${theme.cssVars.primary} !important;
+      --primary-foreground: ${theme.cssVars.primaryForeground} !important;
+      --secondary: ${theme.cssVars.secondary} !important;
+      --secondary-foreground: ${theme.cssVars.secondaryForeground} !important;
+      --muted: ${theme.cssVars.muted} !important;
+      --muted-foreground: ${theme.cssVars.mutedForeground} !important;
+      --accent: ${theme.cssVars.accent} !important;
+      --accent-foreground: ${theme.cssVars.accentForeground} !important;
+      --destructive: ${theme.cssVars.destructive} !important;
+      --border: ${theme.cssVars.border} !important;
+      --input: ${theme.cssVars.input} !important;
+      --ring: ${theme.cssVars.ring} !important;
+      --radius: ${theme.cssVars.radius} !important;
+      ${theme.cssVars.fontSans ? `--font-sans: ${theme.cssVars.fontSans} !important;` : ''}
+    }
+    body {
+      background-color: var(--background) !important;
+      color: var(--foreground) !important;
+      ${theme.cssVars.fontSans ? `font-family: var(--font-sans) !important;` : ''}
+    }
+  `, []);
+
+  const applyThemeToIframe = useCallback(() => {
+    if (!appliedTheme || !iframeRef.current?.contentDocument) return;
+    const doc = iframeRef.current.contentDocument;
+    let styleEl = doc.getElementById('theme-overrides') as HTMLStyleElement;
+    if (!styleEl) {
+      styleEl = doc.createElement('style');
+      styleEl.id = 'theme-overrides';
+      doc.head.appendChild(styleEl);
+    }
+    const css = getThemeCSS(appliedTheme);
+    if (styleEl.textContent !== css) {
+      styleEl.textContent = css;
+    }
+  }, [appliedTheme, getThemeCSS]);
+
+  // Apply theme when iframe loads or theme changes
+  useEffect(() => {
+    applyThemeToIframe();
+    // Also re-apply after a short delay to ensure injected content is covered
+    const timer = setTimeout(applyThemeToIframe, 500);
+    return () => clearTimeout(timer);
+  }, [applyThemeToIframe, artifact.content]);
+
+  // Use useEffect to handle content updates via postMessage instead of srcDoc
+  useEffect(() => {
+    // Only update via postMessage if content changed and it's not the initial content
+    if (artifact.content !== lastContentRef.current) {
+        // IMPORTANT: Check if the content is already in the iframe to avoid wiping selection
+        if (iframeRef.current?.contentDocument) {
+            const currentContent = sanitizeDocumentHtml(iframeRef.current.contentDocument, artifact.content);
+            if (currentContent === artifact.content) {
+                lastContentRef.current = artifact.content;
+                return;
+            }
+        }
+
+        // Only update if complete or a substantial new block is ready
+        if (artifact.isComplete || artifact.content.length > lastContentRef.current.length + 200) {
+            if (iframeRef.current?.contentWindow) {
+                iframeRef.current.contentWindow.postMessage({
+                    type: 'UPDATE_CONTENT',
+                    content: artifact.content
+                }, '*');
+                // Re-apply theme after content update
+                setTimeout(applyThemeToIframe, 10);
+            }
+            lastContentRef.current = artifact.content;
+        }
+    }
+  }, [artifact.content, artifact.isComplete, applyThemeToIframe]);
+
+  return (
+    <iframe 
+      ref={(el) => {
+        (iframeRef as any).current = el;
+        onRef(index, el);
+      }}
+      srcDoc={initialSrcDoc}
+      loading="eager"
+      scrolling="no"
+      className={cn(
+        "w-full h-full border-none overflow-hidden",
+        (activeTool === 'select' || activeTool === 'hand' || isDraggingFrame) && !isEditMode ? "pointer-events-none" : "pointer-events-auto"
+      )}
+      title={artifact.title}
+    />
+  );
+});
+
+ArtifactFrame.displayName = 'ArtifactFrame';
 
 
 export default function ProjectPage() {
@@ -527,14 +922,12 @@ export default function ProjectPage() {
     const handleMessage = (event: MessageEvent) => {
       if (event.data.type === 'HEIGHT_UPDATE' && typeof event.data.height === 'number') {
         const sourceWindow = event.source as Window;
-        // Find which iframe sent the message
         const iframes = document.querySelectorAll('iframe');
         iframes.forEach((iframe, index) => {
           if (iframe.contentWindow === sourceWindow) {
             setDynamicFrameHeights(prev => {
               const currentHeight = prev[index] || 0;
-              // Only update if difference is > 4px to avoid micro-jitter loops
-              if (Math.abs(currentHeight - event.data.height) > 4) {
+              if (Math.abs(currentHeight - event.data.height) > 10) { // Increased threshold to prevent vibration
                  return { ...prev, [index]: event.data.height };
               }
               return prev;
@@ -542,10 +935,61 @@ export default function ProjectPage() {
           }
         });
       }
+
+      if (event.data.type === 'ELEMENT_CLICKED') {
+        const sourceWindow = event.source as Window;
+        const iframes = document.querySelectorAll('iframe');
+        iframes.forEach((iframe, index) => {
+          if (iframe.contentWindow === sourceWindow) {
+            setSelectedArtifactIndex(index);
+            // Since we are same-origin, we can reach into the iframe
+            // and find the element that has the 'edit-selected-highlight' class
+            const doc = iframe.contentDocument;
+            if (doc) {
+              const el = doc.querySelector('.edit-selected-highlight') as HTMLElement;
+              if (el) {
+                setSelectedEl(el);
+              }
+            }
+          }
+        });
+      }
     };
+    
+    const handleSelectionCleared = (event: MessageEvent) => {
+      if (event.data.type === 'SELECTION_CLEARED') {
+          setSelectedEl(null);
+      }
+    };
+
     window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    window.addEventListener('message', handleSelectionCleared);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      window.removeEventListener('message', handleSelectionCleared);
+    };
   }, []);
+
+  // Broadcast Edit Mode state to all iframes
+  useEffect(() => {
+    const iframes = document.querySelectorAll('iframe');
+    iframes.forEach(iframe => {
+      iframe.contentWindow?.postMessage({ 
+        type: 'SET_EDIT_MODE', 
+        enabled: isEditMode 
+      }, '*');
+    });
+  }, [isEditMode, throttledArtifacts]);
+
+  // Broadcast Clear Selection state
+  useEffect(() => {
+    if (selectedEl === null) {
+      const iframes = document.querySelectorAll('iframe');
+      iframes.forEach(iframe => {
+        iframe.contentWindow?.postMessage({ type: 'CLEAR_SELECTION' }, '*');
+      });
+    }
+  }, [selectedEl]);
 
   const commitEdits = useCallback(() => {
     if (selectedArtifactIndex === null) return;
@@ -563,114 +1007,19 @@ export default function ProjectPage() {
     
     setThrottledArtifacts(updatedArtifacts);
     setArtifacts(updatedArtifacts);
-    toast.info("Edits applied locally. Click Save to persist.");
   }, [selectedArtifactIndex, throttledArtifacts]);
 
+  const commitEditsRef = useRef(commitEdits);
+  useEffect(() => {
+    commitEditsRef.current = commitEdits;
+  }, [commitEdits]);
+
   const applyTheme = useCallback((theme: any) => {
-    if (selectedArtifactIndex === null) {
-        toast.error("Select a screen to apply theme");
-        return;
-    }
-    const iframe = iframeRefs.current[selectedArtifactIndex];
-    if (!iframe || !iframe.contentDocument) return;
-
-    const doc = iframe.contentDocument;
-    let styleEl = doc.getElementById('theme-overrides') as HTMLStyleElement;
-    
-    if (!styleEl) {
-      styleEl = doc.createElement('style');
-      styleEl.id = 'theme-overrides';
-      doc.head.appendChild(styleEl);
-    }
-
-    const getThemeCSS = (theme: any) => `
-      :root {
-        --background: ${theme.cssVars.background} !important;
-        --foreground: ${theme.cssVars.foreground} !important;
-        --card: ${theme.cssVars.card} !important;
-        --card-foreground: ${theme.cssVars.cardForeground} !important;
-        --popover: ${theme.cssVars.popover} !important;
-        --popover-foreground: ${theme.cssVars.popoverForeground} !important;
-        --primary: ${theme.cssVars.primary} !important;
-        --primary-foreground: ${theme.cssVars.primaryForeground} !important;
-        --secondary: ${theme.cssVars.secondary} !important;
-        --secondary-foreground: ${theme.cssVars.secondaryForeground} !important;
-        --muted: ${theme.cssVars.muted} !important;
-        --muted-foreground: ${theme.cssVars.mutedForeground} !important;
-        --accent: ${theme.cssVars.accent} !important;
-        --accent-foreground: ${theme.cssVars.accentForeground} !important;
-        --destructive: ${theme.cssVars.destructive} !important;
-        --border: ${theme.cssVars.border} !important;
-        --input: ${theme.cssVars.input} !important;
-        --ring: ${theme.cssVars.ring} !important;
-        --radius: ${theme.cssVars.radius} !important;
-        ${theme.cssVars.fontSans ? `--font-sans: ${theme.cssVars.fontSans} !important;` : ''}
-      }
-      body {
-        background-color: var(--background) !important;
-        color: var(--foreground) !important;
-        ${theme.cssVars.fontSans ? `font-family: var(--font-sans) !important;` : ''}
-      }
-    `;
-
-    styleEl.textContent = getThemeCSS(theme);
     setActiveThemeId(theme.id);
     setAppliedTheme(theme);
-    toast.success(`Applied ${theme.name} theme locally. Click Save to persist.`);
-  }, [selectedArtifactIndex, artifacts, zoom, canvasOffset, framePos, projectId]);
+    toast.success(`Theme "${theme.name}" selected. Click Save to persist.`);
+  }, []);
 
-  // Re-apply theme when artifacts or theme change
-  useEffect(() => {
-    if (!appliedTheme || throttledArtifacts.length === 0) return;
-    
-    const getThemeCSS = (theme: any) => `
-      :root {
-        --background: ${theme.cssVars.background} !important;
-        --foreground: ${theme.cssVars.foreground} !important;
-        --card: ${theme.cssVars.card} !important;
-        --card-foreground: ${theme.cssVars.cardForeground} !important;
-        --popover: ${theme.cssVars.popover} !important;
-        --popover-foreground: ${theme.cssVars.popoverForeground} !important;
-        --primary: ${theme.cssVars.primary} !important;
-        --primary-foreground: ${theme.cssVars.primaryForeground} !important;
-        --secondary: ${theme.cssVars.secondary} !important;
-        --secondary-foreground: ${theme.cssVars.secondaryForeground} !important;
-        --muted: ${theme.cssVars.muted} !important;
-        --muted-foreground: ${theme.cssVars.mutedForeground} !important;
-        --accent: ${theme.cssVars.accent} !important;
-        --accent-foreground: ${theme.cssVars.accentForeground} !important;
-        --destructive: ${theme.cssVars.destructive} !important;
-        --border: ${theme.cssVars.border} !important;
-        --input: ${theme.cssVars.input} !important;
-        --ring: ${theme.cssVars.ring} !important;
-        --radius: ${theme.cssVars.radius} !important;
-        ${theme.cssVars.fontSans ? `--font-sans: ${theme.cssVars.fontSans} !important;` : ''}
-      }
-      body {
-        background-color: var(--background) !important;
-        color: var(--foreground) !important;
-        ${theme.cssVars.fontSans ? `font-family: var(--font-sans) !important;` : ''}
-      }
-    `;
-
-    const timer = setTimeout(() => {
-        throttledArtifacts.forEach((_, index) => {
-            const iframe = iframeRefs.current[index];
-            if (!iframe || !iframe.contentDocument) return;
-            
-            const doc = iframe.contentDocument;
-            let styleEl = doc.getElementById('theme-overrides') as HTMLStyleElement;
-            if (!styleEl) {
-              styleEl = doc.createElement('style');
-              styleEl.id = 'theme-overrides';
-              doc.head.appendChild(styleEl);
-            }
-            styleEl.textContent = getThemeCSS(appliedTheme);
-        });
-    }, 500);
-    
-    return () => clearTimeout(timer);
-  }, [appliedTheme, throttledArtifacts]);
 
   // Refs for tracking hovered/selected elements to avoid re-running useEffect
   const hoveredElRef = useRef<HTMLElement | null>(null);
@@ -747,9 +1096,9 @@ export default function ProjectPage() {
         target.setAttribute("contenteditable", "true");
         target.focus();
         
-        const handleBlur = () => {
+         const handleBlur = () => {
             target.removeAttribute("contenteditable");
-            commitEdits();
+            commitEditsRef.current();
             target.removeEventListener("blur", handleBlur);
         };
         target.addEventListener("blur", handleBlur);
@@ -772,7 +1121,7 @@ export default function ProjectPage() {
         if (currentHovered) currentHovered.classList.remove('edit-hover-highlight');
         if (currentSelected) currentSelected.classList.remove('edit-selected-highlight');
     };
-  }, [isEditMode, selectedArtifactIndex, commitEdits]);
+  }, [isEditMode, selectedArtifactIndex]); // Removed commitEdits from dependencies
 
   // Save canvas data on change
   const handleSave = async () => {
@@ -789,7 +1138,8 @@ export default function ProjectPage() {
             zoom,
             canvasOffset,
             dynamicFrameHeights,
-            artifactPreviewModes
+            artifactPreviewModes,
+            appliedTheme
           }
         })
       });
@@ -1327,6 +1677,7 @@ export default function ProjectPage() {
         {leftSidebarMode === 'properties' ? (
           <ElementSettings 
             selectedEl={selectedEl} 
+            setSelectedEl={setSelectedEl}
             clearSelection={() => setSelectedEl(null)}
             onUpdate={commitEdits}
           />
@@ -1882,7 +2233,7 @@ export default function ProjectPage() {
 
                      <div 
                       className={cn(
-                        "transition-all duration-300 ease-in-out shadow-[0_40px_100px_rgba(0,0,0,0.4)] overflow-hidden border relative flex-shrink-0",
+                        "transition-shadow duration-300 ease-in-out shadow-[0_40px_100px_rgba(0,0,0,0.4)] overflow-hidden border relative flex-shrink-0",
                         isDraggingFrame && selectedArtifactIndex === index && "shadow-[0_60px_120px_rgba(0,0,0,0.5)]",
                         (() => {
                          const mode = artifactPreviewModes[index];
@@ -1913,18 +2264,16 @@ export default function ProjectPage() {
                           boxShadow: selectedArtifactIndex === index ? `0 0 0 2px ${SELECTION_BLUE}40, 0 40px 100px rgba(0,0,0,0.4)` : undefined
                         }}
                      >
-                        {!artifact.isComplete && <ModernShimmer type={artifact.type} appliedTheme={appliedTheme} />}
+                        {(!artifact.isComplete && !artifact.content) && <ModernShimmer type={artifact.type} appliedTheme={appliedTheme} />}
                     
-                     <iframe 
-                       ref={el => { iframeRefs.current[index] = el; }}
-                       srcDoc={getInjectedHTML(artifact.content)}
-                       loading="eager"
-                       scrolling="no"
-                       className={cn(
-                         "w-full h-full border-none overflow-hidden",
-                         (activeTool === 'select' || activeTool === 'hand' || isDraggingFrame) && !isEditMode ? "pointer-events-none" : "pointer-events-auto"
-                       )}
-                       title={artifact.title}
+                     <ArtifactFrame 
+                       artifact={artifact}
+                       index={index}
+                       isEditMode={isEditMode}
+                       activeTool={activeTool}
+                       isDraggingFrame={isDraggingFrame}
+                       appliedTheme={appliedTheme}
+                       onRef={(i, el) => { iframeRefs.current[i] = el; }}
                      />
                      </div>
 

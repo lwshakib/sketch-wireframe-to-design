@@ -13,5 +13,5 @@ export const GeminiModel = () => {
   const google = createGoogleGenerativeAI({
     apiKey: getSingleAPIKey(),
   });
-  return google("gemini-2.5-flash-lite"); 
+  return google("gemini-2.5-flash"); 
 };
